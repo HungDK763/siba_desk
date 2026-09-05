@@ -1,0 +1,14 @@
+# ESP-IDF Build directory
+build/
+sdkconfig
+sdkconfig.old
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.tmp
+
+# Python / Environment
+__pycache__/
+*.pyc
