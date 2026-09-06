@@ -21,6 +21,7 @@
 #include "lvgl.h"
 
 #include "display_ui.h"
+#include "touch_xpt2046.h"
 
 static const char *TAG = "DISP_UI";
 
@@ -727,6 +728,11 @@ esp_err_t display_ui_init(void) {
         build_home_screen();
         lv_scr_load(scr_console); // Mặc định mở màn hình Dashboard Quota
         set_signal_level(0);       // Khởi động chưa có BLE: hiện dấu x đỏ
+
+        // 11. Cảm ứng XPT2046
+        touch_xpt2046_init();
+        touch_xpt2046_register_lvgl();
+
         lvgl_unlock();
     }
 
