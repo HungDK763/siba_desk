@@ -1,65 +1,95 @@
-# ESP32-S3 BLE Multi-HID Controller (Bàn phím + Chuột + Media + LaunchPad)
+# ESP32-S3 BLE Gamepad & Multi-HID Controller
 
-Dự án firmware ESP32-S3 điều khiển thiết bị **Multi-function BLE HID** đa năng chuyên nghiệp, hỗ trợ giao tiếp không dây với hệ điều hành **Ubuntu**, **Windows**, **macOS**, **Android**, **iOS**.
-
----
-
-## 🎹 Tính năng HID Đa Năng (Composite HID Reports)
-
-Thiết bị được thiết kế theo chuẩn BLE HID Profile (HOGP - HID Over GATT Profile) với 4 kênh điều khiển độc lập:
-
-1. **Report ID 1 (Keyboard - Bàn phím chuẩn 8-byte)**:
-   - Hỗ trợ 8 phím Modifier (`Ctrl`, `Shift`, `Alt`, `GUI`) và tối đa 6 phím nhấn cùng lúc (6KRO).
-   - Dùng để gửi phím tắt, gõ văn bản, điều khiển DAW hoặc game.
-
-2. **Report ID 2 (Consumer Media Control)**:
-   - Điều khiển âm lượng và trình phát đa phương tiện: `Play/Pause`, `Stop`, `Next Track`, `Previous Track`, `Mute`, `Volume Up`, `Volume Down`.
-
-3. **Report ID 3 (LaunchPad 16-Button Matrix)**:
-   - Quản lý ma trận 16 phím bấm (Buttons 1-16) cho pad âm nhạc, DJ, hoặc Gamepad.
-
-4. **Report ID 4 (Mouse - Chuột máy tính)**:
-   - Điều khiển con trỏ chuột: Tọa độ tương đối `X`, `Y` (-127 đến 127).
-   - Cuộn chuột (`Wheel`).
-   - 3 nút bấm chuột: `Left Click`, `Right Click`, `Middle Click`.
+Dự án firmware ESP32-S3 điều khiển thiết bị **Standard BLE Gamepad & Multi-HID** chuyên nghiệp, hỗ trợ giao tiếp không dây với **Bluepad32**, **Ubuntu**, **Windows**, **macOS**, **Android**, **iOS**, **Steam**.
 
 ---
 
-## 🛠 Nguyên nhân & Cách khắc phục lỗi "Không tìm thấy ESP qua Bluetooth"
+## 🎮 Chuẩn Gamepad Bluetooth (HOGP - Xbox Wireless Controller)
 
-| Vấn đề trước đây | Nguyên nhân gốc rễ | Giải pháp đã khắc phục |
-|---|---|---|
-| Không thể search thấy ESP32 | Gói `raw_adv_data` dài **32 bytes**, trong khi giới hạn chuẩn của BLE Legacy Advertising là **31 bytes**. ESP-IDF từ chối cấu hình (`ESP_ERR_INVALID_ARG`) làm BLE không phát sóng. | Tách tên thiết bị sang gói **Scan Response Data** (`ESP32 Multi-HID`), gói Adv Data rút gọn còn **20 bytes** (an toàn tuyệt đối). |
-| Race Condition khi bật Advertising | Gọi `esp_ble_gap_start_advertising()` trước khi các gói Adv Data / Scan Response nạp xong vào BLE Controller. | Sử dụng cờ đồng bộ `adv_config_done` đợi đầy đủ cả Service Table và Adv Data mới bắt đầu phát sóng. |
-| Console Log không hiển thị | Cấu hình xuất log mặc định ra UART0 (GPIO 43/44) thay vì cổng USB Type-C native của ESP32-S3 (`/dev/ttyACM0`). | Cấu hình `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y` để theo dõi log trực tiếp qua cổng USB native. |
+Thiết bị được thiết kế chuẩn Xbox Wireless Controller (tương thích 100% với **Bluepad32**, **Ubuntu**, **Windows**, **macOS**, **Android**, **iOS**, **Steam**):
+- **Device Name**: `Xbox Wireless Controller`
+- **Appearance**: `0x03C4` (Gamepad Controller).
+- **Vendor ID (VID)**: `0x045E` (Microsoft)
+- **Product ID (PID)**: `0x02E0` (Xbox One Controller Bluetooth)
+- **Services**:
+  1. `Device Information Service (0x180A)`: Cung cấp PnP ID, Manufacturer, Model Number.
+  2. `Human Interface Device Service (0x1812)`: Bảng Descriptor 335 byte chuẩn Xbox One Firmware v4.8/v5.x.
+- **Tọa độ Analog Left Stick**:
+  - Tâm (Center): `left_x = 32768, left_y = 32768`
+  - Đẩy LÊN MAX 100%: `left_y = 0` (Trên Bluepad32 `ctl->axisY()` trả về `-512`)
+  - Đẩy XUỐNG MAX 100%: `left_y = 65535` (Trên Bluepad32 `ctl->axisY()` trả về `+511`)
 
 ---
 
-## 🚀 Thao tác với ESP-IDF
+## 🕹️ Chế Độ Hoạt Động & Nút BOOT (GPIO 0)
 
-### 1. Kích hoạt môi trường ESP-IDF v5.3.5
+Thiết bị tích hợp hệ thống **Chuyển Chế Độ Linh Hoạt (Multi-HID Mode)**:
+
+### 1. Thao tác điều khiển với Nút BOOT (GPIO 0):
+- **Bấm nhanh (< 2 giây)**: Kích hoạt hành vi tương ứng của Mode hiện tại.
+- **Nhấn giữ 2 giây**: **Chuyển sang Mode tiếp theo** (Xoay vòng: Gamepad ➔ Keyboard ➔ Mouse ➔ Gamepad).
+- **Nhấn giữ > 6 giây**: **Xóa bộ nhớ ghép đôi (Reset Bonds)** trong NVS Flash để ghép đôi với máy mới.
+
+---
+
+### 2. Chi tiết 3 Chế Độ (Modes):
+
+| Chế Độ | Biểu Tượng | Hành Vi Khi Bấm Nút BOOT (<2s) | Nhả Nút BOOT | Tương Thích |
+| :--- | :---: | :--- | :--- | :--- |
+| **Mode 1: GAMEPAD** | 🎮 | Đẩy **Left Joystick LÊN MAX 100%** (`left_y = 0`) | Left Joystick về tâm (`32768`) | **Bluepad32** (`ctl->axisY() = -512`), PC, Steam |
+| **Mode 2: KEYBOARD** | ⌨️ | Gửi phím **SPACE (Phím Cách)** | Nhả phím | Máy tính, Điện thoại (Dừng/phát Youtube, phím nhảy) |
+| **Mode 3: MOUSE** | 🖱️ | **Click Chuột Trái** (`Left Click Down`) | Nhả Click Chuột Trái | Máy tính, Điện thoại (Bấm chọn link, file, click màn hình) |
+
+---
+
+## 🔍 Tại sao giải pháp này tối ưu?
+- **Không cần ngắt kết nối Bluetooth**: Nhờ chuẩn **Composite HID**, máy tính nhận diện đồng thời cả 3 driver (Gamepad, Bàn phím, Chuột) trong 1 kết nối duy nhất. Khi bạn giữ 2s đổi mode, lệnh được chuyển tức thì 0 giây.
+- **Tương thích hoàn toàn với Bluepad32**: Ở Mode Gamepad, Bluepad32 nhận diện thiết bị là `Xbox Wireless Controller` và đọc trọn vẹn tín hiệu cần Joystick / Buttons.
+
+---
+
+## 📱 Hướng Dẫn Kết Nối với Con ESP32 chạy Bluepad32
+
+Trên con ESP32 chạy Bluepad32 (Arduino / ESP-IDF):
+
+```cpp
+#include <Bluepad32.h>
+
+void onConnectedController(ControllerPtr ctl) {
+    Serial.printf("🎉 Đã kết nối thành công với Gamepad: %s\n", ctl->getModelName().c_str());
+}
+
+void onDisconnectedController(ControllerPtr ctl) {
+    Serial.println("Gamepad disconnected.");
+}
+
+void setup() {
+    Serial.begin(115200);
+    
+    // Mở cửa đón nhận thiết bị mới & xóa cache cũ nếu cần
+    BP32.forgetBluetoothKeys();
+    BP32.enableNewBluetoothConnections(true);
+    
+    BP32.setup(&onConnectedController, &onDisconnectedController);
+}
+
+void loop() {
+    BP32.update();
+    // Đọc trạng thái nút bấm và cần analog từ ESP32 Gamepad...
+}
+```
+
+---
+
+## 🚀 Thao tác Lệnh trên Máy tính
+
 ```bash
+# Kích hoạt ESP-IDF
 source /home/hungdk4/.espressif/v5.3.5/esp-idf/export.sh
-```
 
-### 2. Biên dịch & Nạp Firmware
-```bash
-cd esp_lanchpad_hid
+# Nạp Firmware
 idf.py -p /dev/ttyACM0 flash
-```
 
-### 3. Xem Log Serial Monitor
-```bash
+# Theo dõi Log Serial
 idf.py -p /dev/ttyACM0 monitor
 ```
-
----
-
-## 📱 Hướng dẫn Kết nối & Kiểm tra Thực tế
-
-1. Mở Cài đặt **Bluetooth** trên máy tính (Ubuntu hoặc Windows) hoặc điện thoại.
-2. Tìm thiết bị có tên **`ESP32 Multi-HID`** và bấm **Connect / Pair**.
-3. Thiết bị sẽ tự động ghép đôi bảo mật (Just Works Bonding).
-4. **Kiểm tra chức năng Tăng Âm Lượng bằng nút BOOT (GPIO 0)**:
-   - Nhấn nút **BOOT**: ESP32 gửi lệnh Media **Volume Increment (Tăng âm lượng)**. Bạn sẽ thấy thanh âm lượng trên máy tính hoặc điện thoại tăng lên!
-   - Nhả nút **BOOT**: ESP32 gửi nhả phím media.
