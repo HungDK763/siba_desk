@@ -245,15 +245,36 @@ def cmd_config(args):
         print(f"{BOLD}⚙️ CẤU HÌNH HIỆN TẠI:{RESET}")
         print(f"   1. Địa chỉ MAC ESP32:  {CYAN}{cfg.get('device_mac')}{RESET}")
         print(f"   2. Chu kỳ gửi (giây):  {CYAN}{cfg.get('interval_seconds')}{RESET}")
+        print(f"   0. Tự động dò tìm MAC từ thiết bị Bluetooth đang kết nối")
         print()
-        new_mac = input(f"Nhập địa chỉ MAC mới (Enter để giữ nguyên [{cfg.get('device_mac')}]): ").strip()
-        if new_mac:
-            cfg["device_mac"] = new_mac.upper()
-            changed = True
-        new_int = input(f"Nhập chu kỳ gửi giây (Enter để giữ nguyên [{cfg.get('interval_seconds')}]): ").strip()
-        if new_int and new_int.isdigit():
-            cfg["interval_seconds"] = int(new_int)
-            changed = True
+        choice = input("Chọn mục muốn thay đổi (1/2/0, Enter để thoát): ").strip()
+        if choice == "1":
+            new_mac = input(f"Nhập địa chỉ MAC mới [{cfg.get('device_mac')}]: ").strip().upper()
+            if new_mac:
+                if len(new_mac) == 17 and ":" in new_mac:
+                    cfg["device_mac"] = new_mac
+                    changed = True
+                else:
+                    print(f"{RED}❌ Địa chỉ MAC không hợp lệ! Ví dụ đúng: 7C:E8:B1:B2:79:AA{RESET}")
+        elif choice == "2":
+            new_int = input(f"Nhập chu kỳ gửi giây [{cfg.get('interval_seconds')}]: ").strip()
+            if new_int and new_int.isdigit():
+                cfg["interval_seconds"] = max(1, int(new_int))
+                changed = True
+        elif choice == "0":
+            print(f"{CYAN}🔍 Đang dò tìm thiết bị ESP32 / LaunchPad qua Bluetooth...{RESET}")
+            res = run_cmd(["bluetoothctl", "devices", "Connected"])
+            for line in res.splitlines():
+                if "controller" in line.lower() or "esp" in line.lower() or "wireless" in line.lower():
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        found = parts[1].upper()
+                        print(f"{GREEN}✅ Đã tìm thấy: {line} -> MAC: {found}{RESET}")
+                        cfg["device_mac"] = found
+                        changed = True
+                        break
+            if not changed:
+                print(f"{YELLOW}⚠️ Chưa thấy thiết bị ESP32 kết nối qua Bluetooth. Hãy kết nối trước.{RESET}")
 
     if changed:
         save_config(cfg)

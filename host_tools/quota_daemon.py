@@ -226,31 +226,32 @@ def fetch_antigravity_live_quota():
     return None
 
 def parse_reset_time_str(reset_time_iso):
-    """Tính chuỗi thời gian đếm ngược (ví dụ 04:45) từ resetTime ISO 8601."""
+    """Tính chuỗi thời gian đếm ngược HH:MM:SS từ resetTime ISO 8601."""
     if not reset_time_iso:
-        return "05:00"
+        return "00:00:00"
     try:
         s = reset_time_iso.strip()
         if s.endswith('Z'):
             s = s[:-1] + '+00:00'
         dt = datetime.fromisoformat(s)
-        now_ts = datetime.now(timezone.utc).timestamp()
-        diff = int(dt.timestamp() - now_ts)
+        real_now_ts = time.time() + g_cached_time.get("offset", 0.0)
+        diff = int(dt.timestamp() - real_now_ts)
         if diff <= 0:
-            return "00:00"
+            return "00:00:00"
         h = diff // 3600
         m = (diff % 3600) // 60
-        return f"{h:02d}:{m:02d}"
+        sec = diff % 60
+        return f"{h:02d}:{m:02d}:{sec:02d}"
     except Exception:
-        return "05:00"
+        return "00:00:00"
 
 def parse_quota_response(response):
     gemini_5h = None
     gemini_weekly = None
     claude_5h = None
     claude_weekly = None
-    gemini_reset = "04:45"
-    claude_reset = "05:00"
+    gemini_reset = "00:00:00"
+    claude_reset = "00:00:00"
     
     for grp in response.get('groups', []):
         display_name = grp.get('displayName', '').lower()
@@ -332,14 +333,48 @@ def get_system_telemetry():
             pass
     return cpu, ram
 
+async def find_connected_esp_device(bus):
+    """Tự động quét và tìm thiết bị Bluetooth ESP32/LaunchPad đang kết nối có PC_SYNC_CHAR_UUID."""
+    try:
+        hci_intro = await bus.introspect("org.bluez", "/org/bluez/hci0")
+        for node in hci_intro.nodes:
+            if not node.name.startswith("dev_"):
+                continue
+            dev_path = f"/org/bluez/hci0/{node.name}"
+            dev_intro = await bus.introspect("org.bluez", dev_path)
+            obj = bus.get_proxy_object("org.bluez", dev_path, dev_intro)
+            dev_iface = obj.get_interface("org.bluez.Device1")
+            connected = await dev_iface.get_connected()
+            if not connected:
+                continue
+
+            for svc_node in dev_intro.nodes:
+                svc_path = f"{dev_path}/{svc_node.name}"
+                try:
+                    svc_intro = await bus.introspect("org.bluez", svc_path)
+                    for char_node in svc_intro.nodes:
+                        char_full_path = f"{svc_path}/{char_node.name}"
+                        char_intro = await bus.introspect("org.bluez", char_full_path)
+                        c_obj = bus.get_proxy_object("org.bluez", char_full_path, char_intro)
+                        char_iface = c_obj.get_interface("org.bluez.GattCharacteristic1")
+                        uuid = await char_iface.get_uuid()
+                        if uuid.lower() == PC_SYNC_CHAR_UUID.lower():
+                            mac = node.name.replace("dev_", "").replace("_", ":")
+                            return mac, char_iface
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return None, None
+
 async def send_via_dbus_cached(payload_bytes, mac_addr):
-    """Gửi dữ liệu qua D-Bus với Characteristic proxy được tái sử dụng liên tục."""
+    """Gửi dữ liệu qua D-Bus với Characteristic proxy được tái sử dụng liên tục (kèm tự động dò tìm)."""
     global g_cached_dbus
     from dbus_fast.aio import MessageBus
     from dbus_fast import BusType
 
     try:
-        # Nếu đã có proxy và cùng địa chỉ MAC, gọi trực tiếp (<1ms)
+        # 1. Nếu đã có proxy và cùng địa chỉ MAC, gọi trực tiếp (<1ms)
         if g_cached_dbus["char_iface"] and g_cached_dbus["mac"] == mac_addr:
             await g_cached_dbus["char_iface"].call_write_value(payload_bytes, {})
             return True
@@ -348,37 +383,48 @@ async def send_via_dbus_cached(payload_bytes, mac_addr):
             g_cached_dbus["bus"] = await MessageBus(bus_type=BusType.SYSTEM).connect()
 
         bus = g_cached_dbus["bus"]
-        formatted_mac = mac_addr.replace(":", "_").upper()
-        dev_path = f"/org/bluez/hci0/dev_{formatted_mac}"
-        
-        char_path = None
-        introspection = await bus.introspect("org.bluez", dev_path)
-        for node in introspection.nodes:
-            svc_path = f"{dev_path}/{node.name}"
-            try:
-                svc_intro = await bus.introspect("org.bluez", svc_path)
-                for char_node in svc_intro.nodes:
-                    char_full_path = f"{svc_path}/{char_node.name}"
-                    char_intro = await bus.introspect("org.bluez", char_full_path)
-                    obj = bus.get_proxy_object("org.bluez", char_full_path, char_intro)
-                    char_iface = obj.get_interface("org.bluez.GattCharacteristic1")
-                    uuid = await char_iface.get_uuid()
-                    if uuid.lower() == PC_SYNC_CHAR_UUID.lower():
-                        char_path = char_full_path
-                        g_cached_dbus["char_iface"] = char_iface
-                        g_cached_dbus["mac"] = mac_addr
-                        break
-            except Exception:
-                continue
-            if char_path:
-                break
 
-        if g_cached_dbus["char_iface"]:
-            await g_cached_dbus["char_iface"].call_write_value(payload_bytes, {})
+        # 2. Thử kết nối theo MAC được cấu hình (nếu định dạng MAC hợp lệ)
+        if mac_addr and len(mac_addr) == 17 and ":" in mac_addr:
+            formatted_mac = mac_addr.replace(":", "_").upper()
+            dev_path = f"/org/bluez/hci0/dev_{formatted_mac}"
+            try:
+                introspection = await bus.introspect("org.bluez", dev_path)
+                for node in introspection.nodes:
+                    svc_path = f"{dev_path}/{node.name}"
+                    try:
+                        svc_intro = await bus.introspect("org.bluez", svc_path)
+                        for char_node in svc_intro.nodes:
+                            char_full_path = f"{svc_path}/{char_node.name}"
+                            char_intro = await bus.introspect("org.bluez", char_full_path)
+                            obj = bus.get_proxy_object("org.bluez", char_full_path, char_intro)
+                            char_iface = obj.get_interface("org.bluez.GattCharacteristic1")
+                            uuid = await char_iface.get_uuid()
+                            if uuid.lower() == PC_SYNC_CHAR_UUID.lower():
+                                g_cached_dbus["char_iface"] = char_iface
+                                g_cached_dbus["mac"] = mac_addr
+                                await char_iface.call_write_value(payload_bytes, {})
+                                return True
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+        # 3. Dự phòng: Tự động dò tìm thiết bị ESP32 đang kết nối nếu MAC cấu hình sai hoặc không tìm thấy
+        found_mac, char_iface = await find_connected_esp_device(bus)
+        if found_mac and char_iface:
+            g_cached_dbus["char_iface"] = char_iface
+            g_cached_dbus["mac"] = found_mac
+            await char_iface.call_write_value(payload_bytes, {})
+            # Tự động cập nhật lại file cấu hình với MAC đúng
+            if found_mac != mac_addr:
+                cfg = load_config()
+                cfg["device_mac"] = found_mac
+                save_config(cfg)
+                print(f"✨ Đã tự động nhận diện và cập nhật MAC ESP32: {found_mac}", flush=True)
             return True
 
     except Exception as e:
-        # Xóa cache D-Bus nếu kết nối bị đứt
         g_cached_dbus["char_iface"] = None
         raise e
 
@@ -442,16 +488,16 @@ async def run_daemon_loop(args):
             vn_time = get_vietnam_time()
             vn_date = get_vietnam_date()
             
-            g_reset = "04:45"
-            c_reset = "05:00"
+            g_reset = "00:00:00"
+            c_reset = "00:00:00"
             live_quota = fetch_antigravity_live_quota()
             if live_quota:
                 g_5h = live_quota["gemini_5h"]
                 g_w = live_quota["gemini_weekly"]
                 c_5h = live_quota["claude_5h"]
                 c_w = live_quota["claude_weekly"]
-                g_reset = live_quota.get("gemini_reset", "04:45")
-                c_reset = live_quota.get("claude_reset", "05:00")
+                g_reset = live_quota.get("gemini_reset", "00:00:00")
+                c_reset = live_quota.get("claude_reset", "00:00:00")
             else:
                 max_est = 100
                 used = min(stats["prompts_today"], max_est)
@@ -484,10 +530,15 @@ async def run_daemon_loop(args):
 
             print(f"[{datetime.now().strftime('%H:%M:%S')}] VN: {vn_time} ({vn_date}) | G-5h: {g_5h}% (Reset: {g_reset}) | C-5h: {c_5h}% (Reset: {c_reset}) | CPU: {cpu}% RAM: {ram}%", flush=True)
 
-            await send_via_dbus_cached(payload_bytes, target_addr)
+            sent = await send_via_dbus_cached(payload_bytes, target_addr)
+            if not sent:
+                print(f"⚠️ Chưa kết nối được với ESP32 ({target_addr}). Đang chờ thiết bị BLE kết nối...", flush=True)
 
             if args.once:
-                print("✅ Đã gửi thành công và kết thúc lượt chạy (--once).", flush=True)
+                if sent:
+                    print("✅ Đã gửi thành công và kết thúc lượt chạy (--once).", flush=True)
+                else:
+                    print("❌ Gửi thất bại (--once).", flush=True)
                 return
 
             try:

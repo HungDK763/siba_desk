@@ -128,6 +128,8 @@ static bool s_clock_synced = false;
 static uint32_t s_last_packet_time_ms = 0;
 static int32_t s_gemini_reset_sec = -1;
 static int32_t s_claude_reset_sec = -1;
+static uint8_t s_gemini_quota_pct = 100;
+static uint8_t s_claude_quota_pct = 100;
 static char s_last_rendered_hm[8] = "";
 static int s_current_signal_level = -1;
 
@@ -338,18 +340,29 @@ static void clock_tick_timer_cb(lv_timer_t *timer) {
             lv_label_set_text(lbl_home_calendar, date_buf);
         }
 
-        // 3. Tự động đếm lùi thời gian reset Quota 5h
+        // 3. Tự động đếm lùi thời gian reset Quota 5h (từng giây định dạng HH:MM:SS)
         if (s_gemini_reset_sec > 0) {
             s_gemini_reset_sec--;
             char buf[16];
-            snprintf(buf, sizeof(buf), "%02d:%02d", (int)(s_gemini_reset_sec / 3600), (int)((s_gemini_reset_sec % 3600) / 60));
+            snprintf(buf, sizeof(buf), "%02d:%02d:%02d",
+                     (int)(s_gemini_reset_sec / 3600),
+                     (int)((s_gemini_reset_sec % 3600) / 60),
+                     (int)(s_gemini_reset_sec % 60));
             if (lbl_gem_sub) lv_label_set_text(lbl_gem_sub, buf);
+        } else if (s_gemini_reset_sec == 0) {
+            if (lbl_gem_sub) lv_label_set_text(lbl_gem_sub, "00:00:00");
         }
+
         if (s_claude_reset_sec > 0) {
             s_claude_reset_sec--;
             char buf[16];
-            snprintf(buf, sizeof(buf), "%02d:%02d", (int)(s_claude_reset_sec / 3600), (int)((s_claude_reset_sec % 3600) / 60));
+            snprintf(buf, sizeof(buf), "%02d:%02d:%02d",
+                     (int)(s_claude_reset_sec / 3600),
+                     (int)((s_claude_reset_sec % 3600) / 60),
+                     (int)(s_claude_reset_sec % 60));
             if (lbl_cld_sub) lv_label_set_text(lbl_cld_sub, buf);
+        } else if (s_claude_reset_sec == 0) {
+            if (lbl_cld_sub) lv_label_set_text(lbl_cld_sub, "00:00:00");
         }
     }
 }
@@ -802,7 +815,7 @@ static void build_console_screen(void) {
 
     // Thời gian đếm ngược reset quota 5h Gemini (thay thế chữ 5h Limit)
     lbl_gem_sub = lv_label_create(card_gemini);
-    lv_label_set_text(lbl_gem_sub, "04:45");
+    lv_label_set_text(lbl_gem_sub, "00:00:00");
     lv_obj_set_style_text_color(lbl_gem_sub, lv_color_hex(0x94A3B8), 0);
     lv_obj_set_style_text_font(lbl_gem_sub, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl_gem_sub, LV_ALIGN_TOP_MID, 0, 118);
@@ -861,7 +874,7 @@ static void build_console_screen(void) {
 
     // Thời gian đếm ngược reset quota 5h Claude (thay thế chữ 5h Limit)
     lbl_cld_sub = lv_label_create(card_claude);
-    lv_label_set_text(lbl_cld_sub, "05:00");
+    lv_label_set_text(lbl_cld_sub, "00:00:00");
     lv_obj_set_style_text_color(lbl_cld_sub, lv_color_hex(0x94A3B8), 0);
     lv_obj_set_style_text_font(lbl_cld_sub, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl_cld_sub, LV_ALIGN_TOP_MID, 0, 118);
@@ -1435,17 +1448,38 @@ esp_err_t display_ui_update_quota(const pc_quota_packet_t *quota) {
         }
     }
 
-    // Parse thời gian đếm lùi reset Quota 5h
+    s_gemini_quota_pct = quota->antigrav_quota_percent;
+    s_claude_quota_pct = quota->claude_5h_percent;
+
+    // Parse thời gian đếm lùi reset Quota 5h (hỗ trợ cả HH:MM:SS và HH:MM)
     if (quota->gemini_reset[0] != '\0') {
-        int rh = 0, rm = 0;
-        if (sscanf(quota->gemini_reset, "%d:%d", &rh, &rm) == 2) {
-            s_gemini_reset_sec = rh * 3600 + rm * 60;
+        int rh = 0, rm = 0, rs = 0;
+        int parsed = sscanf(quota->gemini_reset, "%d:%d:%d", &rh, &rm, &rs);
+        if (parsed == 3) {
+            int32_t new_sec = rh * 3600 + rm * 60 + rs;
+            if (s_gemini_reset_sec < 0 || abs((int)(s_gemini_reset_sec - new_sec)) > 3) {
+                s_gemini_reset_sec = new_sec;
+            }
+        } else if (parsed == 2) {
+            int32_t new_sec = rh * 3600 + rm * 60;
+            if (s_gemini_reset_sec < 0 || abs((int)(s_gemini_reset_sec - new_sec)) > 3) {
+                s_gemini_reset_sec = new_sec;
+            }
         }
     }
     if (quota->claude_reset[0] != '\0') {
-        int rh = 0, rm = 0;
-        if (sscanf(quota->claude_reset, "%d:%d", &rh, &rm) == 2) {
-            s_claude_reset_sec = rh * 3600 + rm * 60;
+        int rh = 0, rm = 0, rs = 0;
+        int parsed = sscanf(quota->claude_reset, "%d:%d:%d", &rh, &rm, &rs);
+        if (parsed == 3) {
+            int32_t new_sec = rh * 3600 + rm * 60 + rs;
+            if (s_claude_reset_sec < 0 || abs((int)(s_claude_reset_sec - new_sec)) > 3) {
+                s_claude_reset_sec = new_sec;
+            }
+        } else if (parsed == 2) {
+            int32_t new_sec = rh * 3600 + rm * 60;
+            if (s_claude_reset_sec < 0 || abs((int)(s_claude_reset_sec - new_sec)) > 3) {
+                s_claude_reset_sec = new_sec;
+            }
         }
     }
 
@@ -1491,8 +1525,16 @@ esp_err_t display_ui_update_quota(const pc_quota_packet_t *quota) {
         if (bar_gemini_w) {
             lv_bar_set_value(bar_gemini_w, quota->gemini_weekly_percent, LV_ANIM_OFF);
         }
-        if (lbl_gem_sub && quota->gemini_reset[0] != '\0') {
-            lv_label_set_text(lbl_gem_sub, quota->gemini_reset);
+        if (lbl_gem_sub) {
+            if (s_gemini_reset_sec >= 0) {
+                snprintf(buf, sizeof(buf), "%02d:%02d:%02d",
+                         (int)(s_gemini_reset_sec / 3600),
+                         (int)((s_gemini_reset_sec % 3600) / 60),
+                         (int)(s_gemini_reset_sec % 60));
+                lv_label_set_text(lbl_gem_sub, buf);
+            } else if (quota->gemini_reset[0] != '\0') {
+                lv_label_set_text(lbl_gem_sub, quota->gemini_reset);
+            }
         }
         if (bar_home_gemini && lbl_home_gem_val) {
             lv_bar_set_value(bar_home_gemini, quota->antigrav_quota_percent, LV_ANIM_OFF);
@@ -1509,8 +1551,16 @@ esp_err_t display_ui_update_quota(const pc_quota_packet_t *quota) {
         if (bar_claude_w) {
             lv_bar_set_value(bar_claude_w, quota->claude_weekly_percent, LV_ANIM_OFF);
         }
-        if (lbl_cld_sub && quota->claude_reset[0] != '\0') {
-            lv_label_set_text(lbl_cld_sub, quota->claude_reset);
+        if (lbl_cld_sub) {
+            if (s_claude_reset_sec >= 0) {
+                snprintf(buf, sizeof(buf), "%02d:%02d:%02d",
+                         (int)(s_claude_reset_sec / 3600),
+                         (int)((s_claude_reset_sec % 3600) / 60),
+                         (int)(s_claude_reset_sec % 60));
+                lv_label_set_text(lbl_cld_sub, buf);
+            } else if (quota->claude_reset[0] != '\0') {
+                lv_label_set_text(lbl_cld_sub, quota->claude_reset);
+            }
         }
         if (bar_home_claude && lbl_home_cld_val) {
             lv_bar_set_value(bar_home_claude, quota->claude_5h_percent, LV_ANIM_OFF);
