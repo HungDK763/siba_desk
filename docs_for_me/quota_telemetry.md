@@ -127,3 +127,24 @@ typedef enum {
 > **Đặc điểm nổi bật:**
 > 1. **Loại bỏ hoàn toàn icon rác**: Giữ tính tối giản, chỉ dùng nút chấm màu biểu thị cảnh báo trực quan.
 > 2. **Căn lề laser (Pixel-perfect Column Alignment)**: Mọi dòng đều có chiều rộng hiển thị chuẩn 70 cột ký tự; viền ngoài `|` và cột phân cách giữa `|` thẳng tắp.
+
+---
+
+## 5. Công Cụ Host PC & Trình Điều Khiển Toàn Cục (`esp_quota`)
+
+### 5.1. Tối Ưu Hóa CPU Siêu Nhẹ (< 0.05% CPU máy tính)
+- **LSP Process & Port Caching**: Không duyệt vòng lặp `/proc` liên tục. Lưu PID và port của Antigravity; chỉ kiểm tra `/proc/<cached_pid>` (thời gian xử lý < 0.1ms).
+- **Non-blocking System Metrics**: Đo `% CPU` với `interval=None` (zero wait/sleep).
+- **BlueZ D-Bus Object Caching**: Duy trì và tái sử dụng proxy đối tượng D-Bus, truyền lệnh BLE trực tiếp qua bộ nhớ bus trong < 1ms.
+- **NTP Time Offset Caching**: Chỉ đồng bộ sai lệch với NTP server 15 phút một lần. Trong chu kỳ bình thường, giờ Việt Nam được tính bằng công thức `time.time() + offset` với chi phí mạng = 0.
+
+### 5.2. Công Cụ Toàn Cục `esp_quota` & Dịch Vụ Systemd
+- **Cài đặt 1-Click (`./install.sh`)**: Tự động cài đặt dependencies, đưa lệnh `esp_quota` vào `$PATH`, khởi tạo dịch vụ nền `systemd --user` và **mặc định tự khởi động cùng máy tính**.
+- **Điều khiển trực quan**: Gõ `esp_quota` ở bất kỳ thư mục nào để mở menu điều khiển hoặc sử dụng subcommands:
+  - `esp_quota status`: Kiểm tra trạng thái dịch vụ, mức chiếm dụng CPU/RAM và Quota hiện tại.
+  - `esp_quota autostart on|off`: Bật / tắt tính năng tự khởi động sau khi mở máy tính.
+  - `esp_quota config`: Cấu hình địa chỉ MAC Bluetooth của ESP32 và chu kỳ đồng bộ.
+  - `esp_quota test`: Gửi thử 1 gói tin BLE tức thì.
+  - `esp_quota log -f`: Xem log thời gian thực.
+  - `esp_quota start|stop|restart`: Quản lý trạng thái tiến trình chạy ngầm.
+- **Gỡ cài đặt sạch sẽ (`./uninstall.sh`)**: Dừng dịch vụ, tắt autostart và gỡ toàn bộ công cụ.

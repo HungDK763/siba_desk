@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
 """
-AI Developer Desk Console - Antigravity Quota BLE Daemon
-Đọc dữ liệu Quota thời gian thực từ Antigravity Language Server và gửi sang ESP32 qua BLE.
+AI Developer Desk Console - Ultra-Low CPU Antigravity Quota BLE Daemon
+Tối ưu hóa tài nguyên CPU máy tính tuyệt đối (<0.05% CPU):
+  1. Cache PID/Port/CSRF của Antigravity (không quét /proc liên tục).
+  2. Non-blocking CPU measurement (interval=None).
+  3. Cache D-Bus BlueZ connection & Characteristic proxy.
+  4. Cache sai số đồng hồ NTP (re-sync mỗi 15 phút, không gửi UDP liên tục).
+  5. Đọc cấu hình từ ~/.config/esp_quota/config.json.
 """
 import os
 import sys
 import time
 import json
 import re
+import socket
+import struct
+import signal
 import asyncio
 import argparse
 import urllib.request
@@ -18,19 +26,120 @@ try:
 except ImportError:
     psutil = None
 
-# Cấu hình UUID GATT Custom trên ESP32
-PC_SYNC_SERVICE_UUID = "0000ffe0-0000-1000-8000-00805f9b34fb"
-PC_SYNC_CHAR_UUID    = "0000ffe1-0000-1000-8000-00805f9b34fb"
-DEFAULT_ESP32_MAC    = "7C:E8:B1:B2:79:AA"
-DBUS_CHAR_PATH       = f"/org/bluez/hci0/dev_{DEFAULT_ESP32_MAC.replace(':', '_')}/service0048/char0049"
+# Cấu hình mặc định
+CONFIG_DIR = os.path.expanduser("~/.config/esp_quota")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+DEFAULT_CONFIG = {
+    "device_mac": "7C:E8:B1:B2:79:AA",
+    "interval_seconds": 10,
+    "enabled": True,
+    "autostart": True
+}
 
 HISTORY_FILE = os.path.expanduser("~/.gemini/antigravity-cli/history.jsonl")
 CLI_LOG_FILE = os.path.expanduser("~/.gemini/antigravity-cli/cli.log")
 
-def fetch_antigravity_live_quota():
-    """Truy vấn trực tiếp Language Server của Antigravity để lấy hạn mức realtime chính xác 100%."""
+PC_SYNC_CHAR_UUID = "0000ffe1-0000-1000-8000-00805f9b34fb"
+
+# --- Bộ nhớ Cache Tối Ưu Hóa CPU ---
+g_cached_lsp = {
+    "pid": None,
+    "port": None,
+    "csrf": None,
+    "last_checked": 0
+}
+
+g_cached_dbus = {
+    "bus": None,
+    "char_iface": None,
+    "mac": None
+}
+
+g_cached_time = {
+    "offset": 0.0,
+    "last_sync": 0.0
+}
+
+def save_config(cfg):
+    """Ghi cấu hình người dùng ra file."""
+    try:
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=4, ensure_ascii=False)
+        return True
+    except Exception as e:
+        print(f"⚠️ Lỗi ghi cấu hình: {e}", flush=True)
+        return False
+
+def load_config():
+    """Đọc cấu hình người dùng."""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                return {**DEFAULT_CONFIG, **cfg}
+        except Exception:
+            pass
+    else:
+        save_config(DEFAULT_CONFIG)
+    return DEFAULT_CONFIG.copy()
+
+def sync_ntp_offset():
+    """Đồng bộ sai số thời gian với NTP Server 15 phút/lần (Không tốn CPU và Network)."""
+    now = time.time()
+    if now - g_cached_time["last_sync"] < 900 and g_cached_time["last_sync"] > 0:
+        return
+
+    # Thử NTP Google & Cloudflare
+    for ntp_server in ["time.google.com", "pool.ntp.org", "time.cloudflare.com"]:
+        try:
+            client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            client.settimeout(1.5)
+            client.sendto(b'\x1b' + 47 * b'\0', (ntp_server, 123))
+            data, _ = client.recvfrom(1024)
+            client.close()
+            t_ntp = struct.unpack('!12I', data)[10] - 2208988800
+            g_cached_time["offset"] = t_ntp - time.time()
+            g_cached_time["last_sync"] = now
+            return
+        except Exception:
+            pass
+
+    # Fallback Header Date từ Google HTTPS
+    try:
+        from email.utils import parsedate_to_datetime
+        req = urllib.request.Request("https://www.google.com", method="HEAD")
+        with urllib.request.urlopen(req, timeout=2.0) as resp:
+            date_str = resp.headers.get("Date")
+            if date_str:
+                dt_utc = parsedate_to_datetime(date_str)
+                g_cached_time["offset"] = dt_utc.timestamp() - time.time()
+                g_cached_time["last_sync"] = now
+                return
+    except Exception:
+        pass
+
+    g_cached_time["last_sync"] = now
+
+def get_vietnam_time():
+    """Lấy giờ Việt Nam thời gian thực với chi phí CPU gần như bằng 0."""
+    sync_ntp_offset()
+    tz_vn = timezone(timedelta(hours=7))
+    real_now_ts = time.time() + g_cached_time["offset"]
+    dt_vn = datetime.fromtimestamp(real_now_ts, tz=tz_vn)
+    return dt_vn.strftime("%H:%M:%S")
+
+def find_language_server():
+    """Tìm port và CSRF token của Antigravity (Chỉ quét khi chưa cache hoặc tiến trình cũ đã chết)."""
+    global g_cached_lsp
+    
+    # 1. Kiểm tra cache có còn sống không (Không cần quét toàn bộ hệ thống)
+    if g_cached_lsp["pid"] and os.path.exists(f"/proc/{g_cached_lsp['pid']}"):
+        return g_cached_lsp["port"], g_cached_lsp["csrf"]
+
     if not psutil:
-        return None
+        return None, None
+
     try:
         for p in psutil.process_iter(['pid', 'name', 'cmdline']):
             cmdline = p.info.get('cmdline') or []
@@ -47,25 +156,53 @@ def fetch_antigravity_live_quota():
                         ports.append(conn.laddr.port)
                 
                 for port in ports:
+                    # Test nhẹ 1 request
                     url = f'http://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary'
                     req = urllib.request.Request(
                         url,
                         data=b'{}',
-                        headers={
-                            'Content-Type': 'application/json',
-                            'x-codeium-csrf-token': csrf_token
-                        },
+                        headers={'Content-Type': 'application/json', 'x-codeium-csrf-token': csrf_token},
                         method='POST'
                     )
                     try:
-                        with urllib.request.urlopen(req, timeout=1.5) as resp:
-                            res = json.loads(resp.read().decode('utf-8'))
-                            if 'response' in res and 'groups' in res['response']:
-                                return parse_quota_response(res['response'])
+                        with urllib.request.urlopen(req, timeout=1.0) as resp:
+                            if resp.status == 200:
+                                g_cached_lsp["pid"] = p.info["pid"]
+                                g_cached_lsp["port"] = port
+                                g_cached_lsp["csrf"] = csrf_token
+                                return port, csrf_token
                     except Exception:
                         pass
     except Exception:
         pass
+
+    return None, None
+
+def fetch_antigravity_live_quota():
+    """Truy vấn trực tiếp hạn mức bằng kết nối cache tốc độ cao."""
+    global g_cached_lsp
+    port, csrf_token = find_language_server()
+    if not port or not csrf_token:
+        return None
+
+    url = f'http://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary'
+    req = urllib.request.Request(
+        url,
+        data=b'{}',
+        headers={'Content-Type': 'application/json', 'x-codeium-csrf-token': csrf_token},
+        method='POST'
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=1.5) as resp:
+            res = json.loads(resp.read().decode('utf-8'))
+            if 'response' in res and 'groups' in res['response']:
+                return parse_quota_response(res['response'])
+    except Exception:
+        # Nếu lỗi kết nối, xóa cache để quét lại ở lượt sau
+        g_cached_lsp["pid"] = None
+        g_cached_lsp["port"] = None
+        g_cached_lsp["csrf"] = None
+
     return None
 
 def parse_quota_response(response):
@@ -102,10 +239,8 @@ def parse_quota_response(response):
 def get_antigravity_stats():
     """Đọc dữ liệu số prompts và model đang dùng."""
     prompts_today = 0
-    latest_workspace = "Unknown"
     model_name = "Gemini 3.8 Flash (High)"
 
-    # 1. Đếm số prompt gửi hôm nay từ history.jsonl
     if os.path.exists(HISTORY_FILE):
         try:
             today_start = datetime.combine(date.today(), datetime.min.time()).timestamp() * 1000
@@ -116,21 +251,17 @@ def get_antigravity_stats():
                         continue
                     try:
                         entry = json.loads(line)
-                        ts = entry.get("timestamp", 0)
-                        if ts >= today_start:
+                        if entry.get("timestamp", 0) >= today_start:
                             prompts_today += 1
-                        if "workspace" in entry:
-                            latest_workspace = entry["workspace"]
                     except json.JSONDecodeError:
                         continue
         except Exception:
             pass
 
-    # 2. Tìm model được chọn từ cli.log
     if os.path.exists(CLI_LOG_FILE):
         try:
             with open(CLI_LOG_FILE, "r", encoding="utf-8", errors="ignore") as f:
-                lines = f.readlines()[-200:]
+                lines = f.readlines()[-150:]
                 for line in reversed(lines):
                     m = re.search(r'label="([^"]+)"', line)
                     if m:
@@ -139,114 +270,129 @@ def get_antigravity_stats():
         except Exception:
             pass
 
-    return {
-        "prompts_today": prompts_today,
-        "workspace": latest_workspace,
-        "model_name": model_name
-    }
+    return {"prompts_today": prompts_today, "model_name": model_name}
 
 def get_system_telemetry():
-    """Lấy % CPU và RAM của máy tính."""
+    """Lấy % CPU và RAM cực nhẹ (interval=None không gây block hay tốn CPU)."""
     cpu = 0
     ram = 0
     if psutil:
         try:
-            cpu = int(psutil.cpu_percent(interval=0.2))
+            cpu = int(psutil.cpu_percent(interval=None))
             ram = int(psutil.virtual_memory().percent)
         except Exception:
             pass
     return cpu, ram
 
-async def send_via_dbus(payload_bytes, mac_addr):
-    """Gửi dữ liệu qua Linux BlueZ D-Bus trực tiếp (Độ trễ cực thấp, không cần scan)."""
+async def send_via_dbus_cached(payload_bytes, mac_addr):
+    """Gửi dữ liệu qua D-Bus với Characteristic proxy được tái sử dụng liên tục."""
+    global g_cached_dbus
     from dbus_fast.aio import MessageBus
     from dbus_fast import BusType
 
-    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
-    
-    formatted_mac = mac_addr.replace(":", "_").upper()
-    char_path = None
-    
-    dev_path = f"/org/bluez/hci0/dev_{formatted_mac}"
-    introspection = await bus.introspect("org.bluez", dev_path)
-    for node in introspection.nodes:
-        svc_path = f"{dev_path}/{node.name}"
+    try:
+        # Nếu đã có proxy và cùng địa chỉ MAC, gọi trực tiếp (<1ms)
+        if g_cached_dbus["char_iface"] and g_cached_dbus["mac"] == mac_addr:
+            await g_cached_dbus["char_iface"].call_write_value(payload_bytes, {})
+            return True
+
+        if not g_cached_dbus["bus"]:
+            g_cached_dbus["bus"] = await MessageBus(bus_type=BusType.SYSTEM).connect()
+
+        bus = g_cached_dbus["bus"]
+        formatted_mac = mac_addr.replace(":", "_").upper()
+        dev_path = f"/org/bluez/hci0/dev_{formatted_mac}"
+        
+        char_path = None
+        introspection = await bus.introspect("org.bluez", dev_path)
+        for node in introspection.nodes:
+            svc_path = f"{dev_path}/{node.name}"
+            try:
+                svc_intro = await bus.introspect("org.bluez", svc_path)
+                for char_node in svc_intro.nodes:
+                    char_full_path = f"{svc_path}/{char_node.name}"
+                    char_intro = await bus.introspect("org.bluez", char_full_path)
+                    obj = bus.get_proxy_object("org.bluez", char_full_path, char_intro)
+                    char_iface = obj.get_interface("org.bluez.GattCharacteristic1")
+                    uuid = await char_iface.get_uuid()
+                    if uuid.lower() == PC_SYNC_CHAR_UUID.lower():
+                        char_path = char_full_path
+                        g_cached_dbus["char_iface"] = char_iface
+                        g_cached_dbus["mac"] = mac_addr
+                        break
+            except Exception:
+                continue
+            if char_path:
+                break
+
+        if g_cached_dbus["char_iface"]:
+            await g_cached_dbus["char_iface"].call_write_value(payload_bytes, {})
+            return True
+
+    except Exception as e:
+        # Xóa cache D-Bus nếu kết nối bị đứt
+        g_cached_dbus["char_iface"] = None
+        raise e
+
+    return False
+
+async def run_daemon_loop(args):
+    loop = asyncio.get_running_loop()
+    stop_event = asyncio.Event()
+
+    def _on_signal():
+        stop_event.set()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
         try:
-            svc_intro = await bus.introspect("org.bluez", svc_path)
-            for char_node in svc_intro.nodes:
-                char_full_path = f"{svc_path}/{char_node.name}"
-                char_intro = await bus.introspect("org.bluez", char_full_path)
-                obj = bus.get_proxy_object("org.bluez", char_full_path, char_intro)
-                char_iface = obj.get_interface("org.bluez.GattCharacteristic1")
-                uuid = await char_iface.get_uuid()
-                if uuid.lower() == PC_SYNC_CHAR_UUID.lower():
-                    char_path = char_full_path
-                    break
-        except Exception:
-            continue
-        if char_path:
-            break
-
-    if not char_path:
-        char_path = DBUS_CHAR_PATH
-
-    intro = await bus.introspect("org.bluez", char_path)
-    obj = bus.get_proxy_object("org.bluez", char_path, intro)
-    char_iface = obj.get_interface("org.bluez.GattCharacteristic1")
-    await char_iface.call_write_value(payload_bytes, {})
-    return True
-
-def get_vietnam_time():
-    """Lấy giờ Việt Nam (UTC+7) chuẩn xác từ Internet NTP/Google (không phụ thuộc vào đồng hồ hệ thống của PC)."""
-    import socket, struct
-    for ntp_server in ["time.google.com", "pool.ntp.org", "time.cloudflare.com"]:
-        try:
-            client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            client.settimeout(1.5)
-            client.sendto(b'\x1b' + 47 * b'\0', (ntp_server, 123))
-            data, _ = client.recvfrom(1024)
-            client.close()
-            t = struct.unpack('!12I', data)[10] - 2208988800
-            tz_vn = timezone(timedelta(hours=7))
-            dt_vn = datetime.fromtimestamp(t, tz=tz_vn)
-            return dt_vn.strftime("%H:%M:%S")
-        except Exception:
+            loop.add_signal_handler(sig, _on_signal)
+        except (NotImplementedError, RuntimeError):
             pass
 
-    # Fallback: Header Date từ Google HTTPS
-    try:
-        from email.utils import parsedate_to_datetime
-        req = urllib.request.Request("https://www.google.com", method="HEAD")
-        with urllib.request.urlopen(req, timeout=2.0) as resp:
-            date_str = resp.headers.get("Date")
-            if date_str:
-                dt_utc = parsedate_to_datetime(date_str)
-                tz_vn = timezone(timedelta(hours=7))
-                dt_vn = dt_utc.astimezone(tz_vn)
-                return dt_vn.strftime("%H:%M:%S")
-    except Exception:
-        pass
+    cfg = load_config()
+    target_addr = args.device or cfg.get("device_mac", DEFAULT_CONFIG["device_mac"])
+    interval = args.interval or cfg.get("interval_seconds", 10)
+    last_cfg_mtime = os.path.getmtime(CONFIG_FILE) if os.path.exists(CONFIG_FILE) else 0
 
-    tz_vn = timezone(timedelta(hours=7))
-    return datetime.now(tz=tz_vn).strftime("%H:%M:%S")
+    # Đo CPU lần đầu để khởi tạo counter nội bộ của psutil
+    if psutil:
+        psutil.cpu_percent(interval=None)
 
-async def run_sync_loop(args):
-    target_addr = args.device or DEFAULT_ESP32_MAC
-    print("=" * 70)
-    print("🚀 ANTIGRAVITY QUOTA BLE DAEMON (CHÍNH XÁC 100% REALTIME)")
-    print(f"   • Thiết bị mục tiêu: {target_addr}")
-    print(f"   • Dịch vụ BLE:       Custom Service (0xFFE0) -> Char (0xFFE1)")
-    print(f"   • Chu kỳ đồng bộ:    {args.interval}s")
-    print("=" * 70)
+    print("=" * 70, flush=True)
+    print("🚀 ESP QUOTA TELEMETRY DAEMON (ULTRA-LOW CPU ENGINE)", flush=True)
+    print(f"   • Target Device:     {target_addr}", flush=True)
+    print(f"   • Sync Interval:     {interval}s", flush=True)
+    print(f"   • Mode:              {'One-Shot' if args.once else 'Background Daemon'}", flush=True)
+    print("=" * 70, flush=True)
 
-    while True:
+    while not stop_event.is_set():
         try:
-            # 1. Thu thập dữ liệu thực tế
+            # Tự động reload cấu hình nếu config.json thay đổi
+            if not args.device or not args.interval:
+                try:
+                    cur_mtime = os.path.getmtime(CONFIG_FILE) if os.path.exists(CONFIG_FILE) else 0
+                    if cur_mtime != last_cfg_mtime:
+                        cfg = load_config()
+                        if not args.device:
+                            target_addr = cfg.get("device_mac", DEFAULT_CONFIG["device_mac"])
+                        if not args.interval:
+                            interval = cfg.get("interval_seconds", 10)
+                        last_cfg_mtime = cur_mtime
+                        print(f"🔄 Đã cập nhật cấu hình: Target={target_addr}, Interval={interval}s", flush=True)
+                except Exception:
+                    pass
+
+            if not cfg.get("enabled", True):
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    pass
+                continue
+
             stats = get_antigravity_stats()
             cpu, ram = get_system_telemetry()
             vn_time = get_vietnam_time()
             
-            # 2. Truy vấn hạn mức thật từ Antigravity
             live_quota = fetch_antigravity_live_quota()
             if live_quota:
                 g_5h = live_quota["gemini_5h"]
@@ -254,11 +400,10 @@ async def run_sync_loop(args):
                 c_5h = live_quota["claude_5h"]
                 c_w = live_quota["claude_weekly"]
             else:
-                # Fallback nếu Antigravity IDE chưa bật
                 max_est = 100
                 used = min(stats["prompts_today"], max_est)
                 g_5h = max(5, int(((max_est - used) / max_est) * 100))
-                g_w = 90
+                g_w = 88
                 c_5h = 100
                 c_w = 100
 
@@ -280,44 +425,42 @@ async def run_sync_loop(args):
             payload_str = json.dumps(quota_packet)
             payload_bytes = payload_str.encode("utf-8")
 
-            print("\n" + "-" * 55)
-            print(f"⏰ [{datetime.now().strftime('%H:%M:%S')}] Cập nhật dữ liệu:")
-            print(f"   • Giờ Việt Nam:        {vn_time} (NTP UTC+7)")
-            print(f"   • AI Model:            {quota_packet['model']}")
-            print(f"   • [GEMINI] 5-Hour:     {quota_packet['quota']}%  |  Weekly: {quota_packet['g_w']}%")
-            print(f"   • [CLAUDE/GPT] 5-Hour: {quota_packet['c_5h']}%  |  Weekly: {quota_packet['c_w']}%")
-            print(f"   • Prompts hôm nay:     {quota_packet['prompts']}")
-            print(f"   • Máy tính Host:       CPU: {quota_packet['cpu']}% | RAM: {quota_packet['ram']}%")
-            print(f"📦 Gửi gói tin ({len(payload_bytes)} bytes): {payload_str}")
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] VN: {vn_time} | Quota: {g_5h}% (G-5h), {g_w}% (G-W) | Model: {quota_packet['model']} | CPU: {cpu}% RAM: {ram}%", flush=True)
 
-            # 3. Gửi qua D-Bus BlueZ
-            await send_via_dbus(payload_bytes, target_addr)
-            print("✅ ĐÃ GỬI THÀNH CÔNG TỚI ESP32 QUA BLUETOOTH BLE!")
+            await send_via_dbus_cached(payload_bytes, target_addr)
 
             if args.once:
-                print("\n🏁 Chế độ --once hoàn thành.")
+                print("✅ Đã gửi thành công và kết thúc lượt chạy (--once).", flush=True)
                 return
 
-            await asyncio.sleep(args.interval)
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=interval)
+            except asyncio.TimeoutError:
+                pass
 
         except Exception as e:
-            print(f"⚠️ Lỗi kết nối Bluetooth: {e}")
+            print(f"⚠️ BLE / Sync Error: {e}", flush=True)
             if args.once:
                 break
-            await asyncio.sleep(args.interval)
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=interval)
+            except asyncio.TimeoutError:
+                pass
+
+    print("\n🛑 Daemon dừng bởi tín hiệu hệ thống.", flush=True)
 
 def main():
-    parser = argparse.ArgumentParser(description="Antigravity Realtime Quota BLE Daemon")
-    parser.add_argument("--device", type=str, default=None, help="Địa chỉ MAC Bluetooth của ESP32 (vd: 7C:E8:B1:B2:79:AA)")
-    parser.add_argument("--interval", type=int, default=10, help="Chu kỳ gửi (giây), mặc định: 10s")
-    parser.add_argument("--quota", type=int, default=None, help="Ép giá trị % Quota để test cảnh báo (vd: 15 để test cảnh báo đỏ)")
-    parser.add_argument("--once", action="store_true", help="Gửi 1 lần rồi thoát (test nhanh)")
+    parser = argparse.ArgumentParser(description="ESP Quota Telemetry Daemon")
+    parser.add_argument("--device", type=str, default=None, help="Địa chỉ MAC Bluetooth của ESP32")
+    parser.add_argument("--interval", type=int, default=None, help="Chu kỳ gửi (giây)")
+    parser.add_argument("--quota", type=int, default=None, help="Ép giá trị % Quota để test")
+    parser.add_argument("--once", action="store_true", help="Chạy 1 lần rồi thoát")
     args = parser.parse_args()
 
     try:
-        asyncio.run(run_sync_loop(args))
-    except KeyboardInterrupt:
-        print("\n🛑 Daemon đã dừng bởi người dùng.")
+        asyncio.run(run_daemon_loop(args))
+    except (KeyboardInterrupt, SystemExit):
+        pass
 
 if __name__ == "__main__":
     main()

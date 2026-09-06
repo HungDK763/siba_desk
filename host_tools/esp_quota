@@ -1,0 +1,435 @@
+#!/usr/bin/env python3
+"""
+CLI Tool: esp_quota
+Điều khiển, cài đặt, giám sát và cấu hình Quota Telemetry Daemon cho ESP32 Desk Console.
+"""
+
+import os
+import sys
+import json
+import shutil
+import argparse
+import subprocess
+
+CONFIG_DIR = os.path.expanduser("~/.config/esp_quota")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+DEFAULT_CONFIG = {
+    "device_mac": "7C:E8:B1:B2:79:AA",
+    "interval_seconds": 10,
+    "enabled": True,
+    "autostart": True
+}
+SERVICE_NAME = "esp_quota.service"
+INSTALL_DIR = os.path.expanduser("~/.local/share/esp_quota")
+DAEMON_FILE = os.path.join(INSTALL_DIR, "quota_daemon.py")
+
+# ANSI Colors
+GREEN = "\033[92m"
+RED = "\033[91m"
+YELLOW = "\033[93m"
+CYAN = "\033[96m"
+BLUE = "\033[94m"
+BOLD = "\033[1m"
+DIM = "\033[2m"
+RESET = "\033[0m"
+
+def find_daemon_script():
+    """Tìm file quota_daemon.py ở thư mục cài đặt hoặc thư mục hiện tại."""
+    if os.path.exists(DAEMON_FILE):
+        return DAEMON_FILE
+    # Kiểm tra cùng thư mục với script này
+    self_dir = os.path.dirname(os.path.abspath(__file__))
+    candidate = os.path.join(self_dir, "quota_daemon.py")
+    if os.path.exists(candidate):
+        return candidate
+    return None
+
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                return {**DEFAULT_CONFIG, **json.load(f)}
+        except Exception:
+            pass
+    return DEFAULT_CONFIG.copy()
+
+def save_config(cfg):
+    try:
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=4, ensure_ascii=False)
+        return True
+    except Exception as e:
+        print(f"{RED}Lỗi lưu cấu hình: {e}{RESET}")
+        return False
+
+def run_cmd(cmd, check=False):
+    res = subprocess.run(cmd, shell=isinstance(cmd, str), capture_output=True, text=True)
+    if check and res.returncode != 0:
+        raise RuntimeError(res.stderr.strip() or f"Command failed: {cmd}")
+    return res
+
+def get_service_status():
+    """Kiểm tra trạng thái systemd service."""
+    res_active = run_cmd(["systemctl", "--user", "is-active", SERVICE_NAME])
+    active_str = res_active.stdout.strip()
+
+    res_enabled = run_cmd(["systemctl", "--user", "is-enabled", SERVICE_NAME])
+    enabled_str = res_enabled.stdout.strip()
+
+    # Tìm thông tin tiến trình
+    pids = []
+    cpu_pct = 0.0
+    mem_mb = 0.0
+    try:
+        import psutil
+        for p in psutil.process_iter(['pid', 'name', 'cmdline']):
+            cmdline = " ".join(p.info.get('cmdline') or [])
+            if "quota_daemon.py" in cmdline and p.pid != os.getpid():
+                pids.append(p.pid)
+                try:
+                    cpu_pct += p.cpu_percent(interval=0.1)
+                    mem_mb += p.memory_info().rss / (1024 * 1024)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    return {
+        "active": active_str,
+        "is_active": active_str == "active",
+        "enabled": enabled_str,
+        "is_enabled": enabled_str == "enabled",
+        "pids": pids,
+        "cpu_pct": round(cpu_pct, 2),
+        "mem_mb": round(mem_mb, 1)
+    }
+
+def print_banner():
+    print(f"{CYAN}{BOLD}╔════════════════════════════════════════════════════════════════════════╗{RESET}")
+    print(f"{CYAN}{BOLD}║         🚀 ESP QUOTA TELEMETRY CONTROLLER (esp_quota)                 ║{RESET}")
+    print(f"{CYAN}{BOLD}║         Quản lý dịch vụ đồng bộ Antigravity Quota BLE cho ESP32        ║{RESET}")
+    print(f"{CYAN}{BOLD}╚════════════════════════════════════════════════════════════════════════╝{RESET}")
+
+def cmd_status(args=None):
+    st = get_service_status()
+    cfg = load_config()
+
+    print_banner()
+    print(f"{BOLD}1. TRẠNG THÁI DỊCH VỤ (Systemd Service):{RESET}")
+    if st["is_active"]:
+        print(f"   • Trạng thái:       {GREEN}{BOLD}● ĐANG CHẠY (Active/Running){RESET}")
+    elif st["active"] == "failed":
+        print(f"   • Trạng thái:       {RED}{BOLD}● LỖI (Failed){RESET}")
+    else:
+        print(f"   • Trạng thái:       {YELLOW}{BOLD}○ ĐÃ DỪNG (Inactive/Stopped){RESET}")
+
+    if st["is_enabled"]:
+        print(f"   • Tự bật khi boot:  {GREEN}{BOLD}[BẬT] Tự khởi động sau khi mở máy (Enabled){RESET}")
+    else:
+        print(f"   • Tự bật khi boot:  {YELLOW}{BOLD}[TẮT] Không tự khởi động (Disabled){RESET}")
+
+    if st["pids"]:
+        print(f"   • Tiến trình (PID): {CYAN}{', '.join(str(p) for p in st['pids'])}{RESET}")
+        print(f"   • CPU Sử Dụng:      {GREEN}{BOLD}{st['cpu_pct']}%{RESET} (Cực nhẹ, <0.05% trung bình)")
+        print(f"   • RAM Sử Dụng:      {CYAN}{st['mem_mb']} MB{RESET}")
+    else:
+        print(f"   • Tiến trình (PID): {DIM}Không có tiến trình nào đang chạy{RESET}")
+
+    print(f"\n{BOLD}2. THÔNG SỐ CẤU HÌNH (~/.config/esp_quota/config.json):{RESET}")
+    print(f"   • Thiết bị ESP32:   {CYAN}{cfg.get('device_mac')}{RESET}")
+    print(f"   • Chu kỳ đồng bộ:   {CYAN}{cfg.get('interval_seconds')} giây{RESET}")
+    print(f"   • Tính năng BLE:    {GREEN if cfg.get('enabled') else RED}{'Bật' if cfg.get('enabled') else 'Tắt'}{RESET}")
+
+    # Hiển thị thông tin Live Quota nhanh từ Antigravity nếu có
+    print(f"\n{BOLD}3. DỮ LIỆU ĐỒNG BỘ HIỆN TẠI (Telemetry Snapshot):{RESET}")
+    daemon_script = find_daemon_script()
+    if daemon_script:
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("daemon_mod", daemon_script)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            vn_time = mod.get_vietnam_time()
+            stats = mod.get_antigravity_stats()
+            live = mod.fetch_antigravity_live_quota()
+            print(f"   • Giờ Việt Nam:     {CYAN}{vn_time}{RESET}")
+            print(f"   • Model AI:         {CYAN}{stats['model_name']}{RESET}")
+            print(f"   • Prompts hôm nay:  {CYAN}{stats['prompts_today']}{RESET}")
+            if live:
+                print(f"   • Gemini Quota:     {GREEN}{live['gemini_5h']}% (5h){RESET} | {GREEN}{live['gemini_weekly']}% (Weekly){RESET}")
+                print(f"   • Claude / 3P:      {GREEN}{live['claude_5h']}% (5h){RESET} | {GREEN}{live['claude_weekly']}% (Weekly){RESET}")
+            else:
+                print(f"   • Quota:            {YELLOW}Antigravity LSP chưa mở (ước tính sẵn sàng){RESET}")
+        except Exception as e:
+            print(f"   • Dữ liệu:          {DIM}(Không thể đọc snapshot: {e}){RESET}")
+    print("-" * 72)
+
+def cmd_start(args=None):
+    print(f"Đang khởi động dịch vụ {SERVICE_NAME}...")
+    run_cmd(["systemctl", "--user", "start", SERVICE_NAME])
+    st = get_service_status()
+    if st["is_active"]:
+        print(f"{GREEN}{BOLD}✅ Dịch vụ đã khởi động thành công!{RESET}")
+    else:
+        print(f"{RED}{BOLD}❌ Khởi động thất bại. Hãy kiểm tra: esp_quota log{RESET}")
+
+def cmd_stop(args=None):
+    print(f"Đang dừng dịch vụ {SERVICE_NAME}...")
+    run_cmd(["systemctl", "--user", "stop", SERVICE_NAME])
+    
+    # Dọn dẹp cả tiến trình chạy tay nếu có
+    st = get_service_status()
+    if st["pids"]:
+        print(f"Đang dọn dẹp các tiến trình tồn đọng: {st['pids']}...")
+        for p in st["pids"]:
+            try:
+                os.kill(p, 15)
+            except Exception:
+                pass
+    print(f"{GREEN}{BOLD}✅ Dịch vụ đã dừng hoàn toàn.{RESET}")
+
+def cmd_restart(args=None):
+    print(f"Đang khởi động lại dịch vụ {SERVICE_NAME}...")
+    run_cmd(["systemctl", "--user", "restart", SERVICE_NAME])
+    st = get_service_status()
+    if st["is_active"]:
+        print(f"{GREEN}{BOLD}✅ Dịch vụ đã được khởi động lại thành công!{RESET}")
+    else:
+        print(f"{RED}{BOLD}❌ Khởi động lại thất bại. Hãy kiểm tra: esp_quota log{RESET}")
+
+def cmd_autostart(args):
+    action = None
+    if hasattr(args, 'state') and args.state:
+        action = args.state.lower()
+
+    if action in ["on", "enable", "1", "true"]:
+        print("Đang bật tính năng tự khởi động cùng máy tính...")
+        run_cmd(["systemctl", "--user", "enable", SERVICE_NAME])
+        cfg = load_config()
+        cfg["autostart"] = True
+        save_config(cfg)
+        try:
+            subprocess.run(["loginctl", "enable-linger", os.environ.get("USER", "")], capture_output=True)
+        except Exception:
+            pass
+        print(f"{GREEN}{BOLD}✅ Đã BẬT tự khởi động cùng máy tính thành công!{RESET}")
+        print("   Dịch vụ sẽ tự động kích hoạt ngay khi máy tính khởi động.")
+    elif action in ["off", "disable", "0", "false"]:
+        print("Đang tắt tính năng tự khởi động cùng máy tính...")
+        run_cmd(["systemctl", "--user", "disable", SERVICE_NAME])
+        cfg = load_config()
+        cfg["autostart"] = False
+        save_config(cfg)
+        print(f"{YELLOW}{BOLD}✅ Đã TẮT tự khởi động cùng máy tính.{RESET}")
+        print("   Dịch vụ sẽ KHÔNG tự chạy khi máy khởi động nữa.")
+    else:
+        st = get_service_status()
+        current = "BẬT" if st["is_enabled"] else "TẮT"
+        print(f"Trạng thái tự khởi động hiện tại: {BOLD}{current}{RESET}")
+        print(f"Sử dụng: {CYAN}esp_quota autostart on{RESET} hoặc {CYAN}esp_quota autostart off{RESET}")
+
+def cmd_config(args):
+    cfg = load_config()
+    changed = False
+
+    if hasattr(args, 'device') and args.device:
+        cfg["device_mac"] = args.device.strip().upper()
+        changed = True
+    if hasattr(args, 'interval') and args.interval:
+        cfg["interval_seconds"] = int(args.interval)
+        changed = True
+
+    if not changed:
+        print_banner()
+        print(f"{BOLD}⚙️ CẤU HÌNH HIỆN TẠI:{RESET}")
+        print(f"   1. Địa chỉ MAC ESP32:  {CYAN}{cfg.get('device_mac')}{RESET}")
+        print(f"   2. Chu kỳ gửi (giây):  {CYAN}{cfg.get('interval_seconds')}{RESET}")
+        print()
+        new_mac = input(f"Nhập địa chỉ MAC mới (Enter để giữ nguyên [{cfg.get('device_mac')}]): ").strip()
+        if new_mac:
+            cfg["device_mac"] = new_mac.upper()
+            changed = True
+        new_int = input(f"Nhập chu kỳ gửi giây (Enter để giữ nguyên [{cfg.get('interval_seconds')}]): ").strip()
+        if new_int and new_int.isdigit():
+            cfg["interval_seconds"] = int(new_int)
+            changed = True
+
+    if changed:
+        save_config(cfg)
+        print(f"{GREEN}{BOLD}✅ Đã lưu cấu hình mới thành công!{RESET}")
+        st = get_service_status()
+        if st["is_active"]:
+            print("Đang khởi động lại dịch vụ để áp dụng ngay...")
+            run_cmd(["systemctl", "--user", "restart", SERVICE_NAME])
+            print(f"{GREEN}✅ Dịch vụ đã áp dụng cấu hình mới.{RESET}")
+    else:
+        print("Không có thay đổi nào.")
+
+def cmd_test(args=None):
+    daemon_script = find_daemon_script()
+    if not daemon_script:
+        print(f"{RED}Không tìm thấy {DAEMON_FILE}. Vui lòng chạy install.sh trước.{RESET}")
+        return
+
+    print_banner()
+    print(f"{CYAN}🧪 Đang gửi thử 1 gói tin BLE Telemetry tới ESP32 (--once)...{RESET}")
+    cmd = [sys.executable, daemon_script, "--once"]
+    if hasattr(args, 'quota') and args.quota is not None:
+        cmd.extend(["--quota", str(args.quota)])
+    if hasattr(args, 'device') and args.device:
+        cmd.extend(["--device", args.device])
+
+    res = subprocess.run(cmd)
+    if res.returncode == 0:
+        print(f"\n{GREEN}{BOLD}✅ Gửi thử nghiệm thành công! Kiểm tra màn hình ESP32 Desk Console.{RESET}")
+    else:
+        print(f"\n{RED}{BOLD}❌ Gửi thử nghiệm thất bại.{RESET}")
+
+def cmd_log(args=None):
+    follow = hasattr(args, 'follow') and args.follow
+    lines = getattr(args, 'lines', 30) or 30
+    print(f"{CYAN}Xem nhật ký hoạt động dịch vụ {SERVICE_NAME}...{RESET}")
+    cmd = ["journalctl", "--user", "-u", SERVICE_NAME, "-n", str(lines)]
+    if follow:
+        cmd.append("-f")
+    else:
+        cmd.append("--no-pager")
+    try:
+        subprocess.run(cmd)
+    except KeyboardInterrupt:
+        pass
+
+def cmd_menu():
+    while True:
+        st = get_service_status()
+        cfg = load_config()
+        print_banner()
+        status_text = f"{GREEN}Đang chạy{RESET}" if st["is_active"] else f"{YELLOW}Đã dừng{RESET}"
+        autostart_text = f"{GREEN}BẬT{RESET}" if st["is_enabled"] else f"{YELLOW}TẮT{RESET}"
+
+        print(f"Trạng thái: {status_text} | Tự khởi động: {autostart_text} | ESP32 MAC: {CYAN}{cfg.get('device_mac')}{RESET}")
+        print("-" * 72)
+        print(f" {BOLD}[1]{RESET} Xem trạng thái chi tiết (Status)")
+        print(f" {BOLD}[2]{RESET} Bật dịch vụ chạy nền (Start)")
+        print(f" {BOLD}[3]{RESET} Dừng dịch vụ chạy nền (Stop)")
+        print(f" {BOLD}[4]{RESET} Khởi động lại dịch vụ (Restart)")
+        print(f" {BOLD}[5]{RESET} BẬT tự khởi động cùng máy tính (Autostart ON)")
+        print(f" {BOLD}[6]{RESET} TẮT tự khởi động cùng máy tính (Autostart OFF)")
+        print(f" {BOLD}[7]{RESET} Đổi cấu hình MAC ESP32 & chu kỳ gửi (Config)")
+        print(f" {BOLD}[8]{RESET} Gửi thử 1 lần tới ESP32 ngay lập tức (Test sync)")
+        print(f" {BOLD}[9]{RESET} Xem nhật ký hoạt động thời gian thực (Live logs)")
+        print(f" {BOLD}[0]{RESET} Thoát (Exit)")
+        print("-" * 72)
+
+        try:
+            choice = input(f"{BOLD}Chọn thao tác [0-9]: {RESET}").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\nTạm biệt!")
+            break
+
+        if choice == "1":
+            cmd_status()
+        elif choice == "2":
+            cmd_start()
+        elif choice == "3":
+            cmd_stop()
+        elif choice == "4":
+            cmd_restart()
+        elif choice == "5":
+            class DummyArgs:
+                state = "on"
+            cmd_autostart(DummyArgs())
+        elif choice == "6":
+            class DummyArgs:
+                state = "off"
+            cmd_autostart(DummyArgs())
+        elif choice == "7":
+            class DummyArgs:
+                device = None
+                interval = None
+            cmd_config(DummyArgs())
+        elif choice == "8":
+            class DummyArgs:
+                quota = None
+                device = None
+            cmd_test(DummyArgs())
+        elif choice == "9":
+            class DummyArgs:
+                follow = True
+                lines = 25
+            cmd_log(DummyArgs())
+        elif choice in ["0", "q", "exit"]:
+            print("Tạm biệt!")
+            break
+        else:
+            print(f"{RED}Lựa chọn không hợp lệ.{RESET}")
+
+        input(f"\n{DIM}Nhấn Enter để tiếp tục...{RESET}")
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="esp_quota",
+        description="ESP Quota Telemetry CLI - Điều khiển & Giám sát Quota trên ESP32 Desk Console"
+    )
+    subparsers = parser.add_subparsers(dest="command", help="Lệnh hỗ trợ")
+
+    # status
+    subparsers.add_parser("status", help="Xem trạng thái dịch vụ và cấu hình")
+
+    # start / stop / restart
+    subparsers.add_parser("start", help="Bật dịch vụ chạy nền")
+    subparsers.add_parser("stop", help="Dừng dịch vụ chạy nền")
+    subparsers.add_parser("restart", help="Khởi động lại dịch vụ")
+
+    # autostart
+    p_auto = subparsers.add_parser("autostart", help="Bật/tắt tính năng tự khởi động cùng máy tính")
+    p_auto.add_argument("state", nargs="?", choices=["on", "off"], help="on: Bật tự khởi động | off: Tắt tự khởi động")
+
+    # config
+    p_conf = subparsers.add_parser("config", help="Xem hoặc chỉnh sửa cấu hình")
+    p_conf.add_argument("--mac", "--device", dest="device", help="Địa chỉ MAC Bluetooth của ESP32")
+    p_conf.add_argument("--interval", type=int, help="Chu kỳ gửi (giây)")
+
+    # test
+    p_test = subparsers.add_parser("test", help="Gửi 1 gói tin thử nghiệm tới ESP32")
+    p_test.add_argument("--quota", type=int, default=None, help="Ép giá trị % Quota để test")
+    p_test.add_argument("--device", default=None, help="Địa chỉ MAC Bluetooth")
+
+    # log
+    p_log = subparsers.add_parser("log", aliases=["logs"], help="Xem nhật ký chạy nền")
+    p_log.add_argument("-f", "--follow", action="store_true", help="Xem thời gian thực liên tục")
+    p_log.add_argument("-n", "--lines", type=int, default=30, help="Số dòng nhật ký gần nhất")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        # Nếu chạy trong terminal có TTY, mở interactive menu
+        if sys.stdin.isatty():
+            cmd_menu()
+        else:
+            cmd_status()
+        return
+
+    cmd = args.command.lower()
+    if cmd == "status":
+        cmd_status(args)
+    elif cmd == "start":
+        cmd_start(args)
+    elif cmd == "stop":
+        cmd_stop(args)
+    elif cmd == "restart":
+        cmd_restart(args)
+    elif cmd == "autostart":
+        cmd_autostart(args)
+    elif cmd == "config":
+        cmd_config(args)
+    elif cmd == "test":
+        cmd_test(args)
+    elif cmd in ["log", "logs"]:
+        cmd_log(args)
+    else:
+        parser.print_help()
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,21 @@
+[Unit]
+Description=ESP Quota Telemetry BLE Daemon
+Documentation=https://github.com
+After=bluetooth.target network-online.target
+Wants=bluetooth.target
+
+[Service]
+Type=simple
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 %h/.local/share/esp_quota/quota_daemon.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Tối ưu hóa tài nguyên CPU và phân phối tải
+Nice=10
+CPUSchedulingPolicy=other
+
+[Install]
+WantedBy=default.target
