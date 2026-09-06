@@ -51,11 +51,13 @@ static lv_disp_drv_t disp_drv;
 static lv_disp_draw_buf_t disp_buf;
 static lv_disp_t *disp_handle = NULL;
 
-// 4 Screen Handles
+// 5 Screen Handles
 static lv_obj_t *scr_console = NULL;
 static lv_obj_t *scr_home = NULL;
 static lv_obj_t *scr_gamepad = NULL;
 static lv_obj_t *scr_kb_mouse = NULL;
+static lv_obj_t *scr_full_kb = NULL;
+static lv_obj_t *ta_full_kb = NULL;
 
 // Screen 1 (Console) Widget Pointers
 static lv_obj_t *lbl_clock = NULL;
@@ -71,7 +73,7 @@ static lv_obj_t *bar_claude_w = NULL;
 
 static lv_obj_t *lbl_system = NULL;
 
-// Signal Bars (Screen 1 & Screen 2 & Screen 3A & Screen 3B)
+// Signal Bars (Screen 1 & Screen 2 & Screen 3A & Screen 3B & Screen 3C)
 static lv_obj_t *bar_sig_1 = NULL;
 static lv_obj_t *bar_sig_2 = NULL;
 static lv_obj_t *bar_sig_3 = NULL;
@@ -95,6 +97,12 @@ static lv_obj_t *km_bar_sig_2 = NULL;
 static lv_obj_t *km_bar_sig_3 = NULL;
 static lv_obj_t *km_bar_sig_4 = NULL;
 static lv_obj_t *km_lbl_sig_x = NULL;
+
+static lv_obj_t *fkb_bar_sig_1 = NULL;
+static lv_obj_t *fkb_bar_sig_2 = NULL;
+static lv_obj_t *fkb_bar_sig_3 = NULL;
+static lv_obj_t *fkb_bar_sig_4 = NULL;
+static lv_obj_t *fkb_lbl_sig_x = NULL;
 
 // Screen 2 (Home) Widget Pointers
 static lv_obj_t *lbl_home_big_clock = NULL;
@@ -250,13 +258,13 @@ static void set_signal_level(int level) {
     lv_color_t c_on = lv_palette_main(LV_PALETTE_GREEN);
     lv_color_t c_off = lv_color_hex(0x475569);
 
-    lv_obj_t *b1_arr[] = {bar_sig_1, h_bar_sig_1, gp_bar_sig_1, km_bar_sig_1};
-    lv_obj_t *b2_arr[] = {bar_sig_2, h_bar_sig_2, gp_bar_sig_2, km_bar_sig_2};
-    lv_obj_t *b3_arr[] = {bar_sig_3, h_bar_sig_3, gp_bar_sig_3, km_bar_sig_3};
-    lv_obj_t *b4_arr[] = {bar_sig_4, h_bar_sig_4, gp_bar_sig_4, km_bar_sig_4};
-    lv_obj_t *x_arr[]  = {lbl_sig_x, h_lbl_sig_x, gp_lbl_sig_x, km_lbl_sig_x};
+    lv_obj_t *b1_arr[] = {bar_sig_1, h_bar_sig_1, gp_bar_sig_1, km_bar_sig_1, fkb_bar_sig_1};
+    lv_obj_t *b2_arr[] = {bar_sig_2, h_bar_sig_2, gp_bar_sig_2, km_bar_sig_2, fkb_bar_sig_2};
+    lv_obj_t *b3_arr[] = {bar_sig_3, h_bar_sig_3, gp_bar_sig_3, km_bar_sig_3, fkb_bar_sig_3};
+    lv_obj_t *b4_arr[] = {bar_sig_4, h_bar_sig_4, gp_bar_sig_4, km_bar_sig_4, fkb_bar_sig_4};
+    lv_obj_t *x_arr[]  = {lbl_sig_x, h_lbl_sig_x, gp_lbl_sig_x, km_lbl_sig_x, fkb_lbl_sig_x};
 
-    for (int s = 0; s < 4; s++) {
+    for (int s = 0; s < 5; s++) {
         if (!b1_arr[s]) continue;
 
         if (level <= 0) {
@@ -536,6 +544,155 @@ static void media_key_action_cb(lv_event_t *e) {
     }
 }
 
+// Loa bật/tắt (Toggle Mute)
+static bool s_is_muted = false;
+static lv_obj_t *lbl_mute_icon = NULL;
+
+static void mute_btn_action_cb(lv_event_t *e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_PRESSED) {
+        s_is_muted = !s_is_muted;
+        if (lbl_mute_icon) {
+            lv_label_set_text(lbl_mute_icon, s_is_muted ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX);
+            lv_obj_set_style_text_color(lbl_mute_icon, s_is_muted ? lv_color_hex(0xEF4444) : lv_color_hex(0x10B981), 0);
+        }
+        ble_hid_send_consumer(CONSUMER_MUTE);
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        ble_hid_send_consumer(0);
+    }
+}
+
+// Chuyển ký tự ASCII sang HID scan code và gửi qua BLE
+static void send_hid_ascii(char c) {
+    uint8_t mod = 0;
+    uint8_t code = 0;
+    if (c >= 'a' && c <= 'z') {
+        code = 0x04 + (c - 'a');
+    } else if (c >= 'A' && c <= 'Z') {
+        mod = KEY_MOD_LSHIFT;
+        code = 0x04 + (c - 'A');
+    } else if (c >= '1' && c <= '9') {
+        code = 0x1E + (c - '1');
+    } else if (c == '0') {
+        code = 0x27;
+    } else if (c == ' ') {
+        code = HID_KEY_SPACE;
+    } else if (c == '\n' || c == '\r') {
+        code = HID_KEY_ENTER;
+    } else {
+        switch (c) {
+            case '!': mod = KEY_MOD_LSHIFT; code = 0x1E; break;
+            case '@': mod = KEY_MOD_LSHIFT; code = 0x1F; break;
+            case '#': mod = KEY_MOD_LSHIFT; code = 0x20; break;
+            case '$': mod = KEY_MOD_LSHIFT; code = 0x21; break;
+            case '%': mod = KEY_MOD_LSHIFT; code = 0x22; break;
+            case '^': mod = KEY_MOD_LSHIFT; code = 0x23; break;
+            case '&': mod = KEY_MOD_LSHIFT; code = 0x24; break;
+            case '*': mod = KEY_MOD_LSHIFT; code = 0x25; break;
+            case '(': mod = KEY_MOD_LSHIFT; code = 0x26; break;
+            case ')': mod = KEY_MOD_LSHIFT; code = 0x27; break;
+            case '-': code = 0x2D; break;
+            case '_': mod = KEY_MOD_LSHIFT; code = 0x2D; break;
+            case '=': code = 0x2E; break;
+            case '+': mod = KEY_MOD_LSHIFT; code = 0x2E; break;
+            case '[': code = 0x2F; break;
+            case '{': mod = KEY_MOD_LSHIFT; code = 0x2F; break;
+            case ']': code = 0x30; break;
+            case '}': mod = KEY_MOD_LSHIFT; code = 0x30; break;
+            case '\\': code = 0x31; break;
+            case '|': mod = KEY_MOD_LSHIFT; code = 0x31; break;
+            case ';': code = 0x33; break;
+            case ':': mod = KEY_MOD_LSHIFT; code = 0x33; break;
+            case '\'': code = 0x34; break;
+            case '\"': mod = KEY_MOD_LSHIFT; code = 0x34; break;
+            case '`': code = 0x35; break;
+            case '~': mod = KEY_MOD_LSHIFT; code = 0x35; break;
+            case ',': code = 0x36; break;
+            case '<': mod = KEY_MOD_LSHIFT; code = 0x36; break;
+            case '.': code = 0x37; break;
+            case '>': mod = KEY_MOD_LSHIFT; code = 0x37; break;
+            case '/': code = 0x38; break;
+            case '?': mod = KEY_MOD_LSHIFT; code = 0x38; break;
+            default: break;
+        }
+    }
+    if (code != 0) {
+        ble_hid_send_keyboard(mod, code);
+        vTaskDelay(pdMS_TO_TICKS(15));
+        ble_hid_send_keyboard(0, 0);
+    }
+}
+
+static void nav_to_full_kb_cb(lv_event_t *e) {
+    if (scr_full_kb) {
+        lv_scr_load_anim(scr_full_kb, LV_SCR_LOAD_ANIM_MOVE_TOP, 200, 0, false);
+    }
+}
+
+static void nav_back_to_kb_mouse_cb(lv_event_t *e) {
+    if (scr_kb_mouse) {
+        lv_scr_load_anim(scr_kb_mouse, LV_SCR_LOAD_ANIM_MOVE_BOTTOM, 200, 0, false);
+    }
+}
+
+static void clr_ta_action_cb(lv_event_t *e) {
+    if (ta_full_kb) {
+        lv_textarea_set_text(ta_full_kb, "");
+    }
+}
+
+static void full_kb_action_cb(lv_event_t *e) {
+    lv_obj_t *kb = lv_event_get_target(e);
+    uint16_t btn_id = lv_btnmatrix_get_selected_btn(kb);
+    if (btn_id == LV_BTNMATRIX_BTN_NONE) return;
+
+    const char *txt = lv_btnmatrix_get_btn_text(kb, btn_id);
+    if (!txt) return;
+
+    if (strcmp(txt, LV_SYMBOL_CLOSE) == 0 || strcmp(txt, LV_SYMBOL_KEYBOARD) == 0) {
+        if (scr_kb_mouse) {
+            lv_scr_load_anim(scr_kb_mouse, LV_SCR_LOAD_ANIM_MOVE_BOTTOM, 200, 0, false);
+        }
+        return;
+    }
+
+    if (strcmp(txt, LV_SYMBOL_OK) == 0 || strcmp(txt, "Enter") == 0 || strcmp(txt, LV_SYMBOL_NEW_LINE) == 0) {
+        ble_hid_send_keyboard(0, HID_KEY_ENTER);
+        vTaskDelay(pdMS_TO_TICKS(15));
+        ble_hid_send_keyboard(0, 0);
+        return;
+    }
+
+    if (strcmp(txt, LV_SYMBOL_BACKSPACE) == 0) {
+        ble_hid_send_keyboard(0, HID_KEY_BACKSPACE);
+        vTaskDelay(pdMS_TO_TICKS(15));
+        ble_hid_send_keyboard(0, 0);
+        return;
+    }
+
+    if (strcmp(txt, LV_SYMBOL_LEFT) == 0) {
+        ble_hid_send_keyboard(0, 0x50); // Arrow Left
+        vTaskDelay(pdMS_TO_TICKS(15));
+        ble_hid_send_keyboard(0, 0);
+        return;
+    }
+
+    if (strcmp(txt, LV_SYMBOL_RIGHT) == 0) {
+        ble_hid_send_keyboard(0, 0x4F); // Arrow Right
+        vTaskDelay(pdMS_TO_TICKS(15));
+        ble_hid_send_keyboard(0, 0);
+        return;
+    }
+
+    if (strcmp(txt, "ABC") == 0 || strcmp(txt, "1#") == 0 || strcmp(txt, "abc") == 0 || strcmp(txt, "+/-") == 0) {
+        return;
+    }
+
+    if (strlen(txt) == 1) {
+        send_hid_ascii(txt[0]);
+    }
+}
+
 esp_err_t display_ui_toggle_screen(void) {
     if (lvgl_lock(100)) {
         lv_obj_t *act = lv_scr_act();
@@ -543,7 +700,7 @@ esp_err_t display_ui_toggle_screen(void) {
             lv_scr_load_anim(scr_home, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
         } else if (act == scr_home && scr_console) {
             lv_scr_load_anim(scr_console, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, false);
-        } else if ((act == scr_gamepad || act == scr_kb_mouse) && scr_home) {
+        } else if ((act == scr_gamepad || act == scr_kb_mouse || act == scr_full_kb) && scr_home) {
             lv_scr_load_anim(scr_home, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, false);
         }
         lvgl_unlock();
@@ -1095,10 +1252,12 @@ static void build_kb_mouse_screen(void) {
     create_control_btn(scr_kb_mouse, 275, 66, 37, 28, "BS", lv_color_hex(0x334155), lv_color_white(),
                        kb_key_action_cb, (void*)(uintptr_t)HID_KEY_BACKSPACE, LV_EVENT_ALL);
 
-    create_control_btn(scr_kb_mouse, 156, 98, 75, 28, "COPY", lv_color_hex(0x4338CA), lv_color_white(),
+    create_control_btn(scr_kb_mouse, 156, 98, 48, 28, "COPY", lv_color_hex(0x4338CA), lv_color_white(),
                        kb_key_action_cb, (void*)(uintptr_t)((KEY_MOD_LCTRL << 8) | HID_KEY_C), LV_EVENT_ALL);
-    create_control_btn(scr_kb_mouse, 234, 98, 78, 28, "PASTE", lv_color_hex(0x6D28D9), lv_color_white(),
+    create_control_btn(scr_kb_mouse, 208, 98, 48, 28, "PASTE", lv_color_hex(0x6D28D9), lv_color_white(),
                        kb_key_action_cb, (void*)(uintptr_t)((KEY_MOD_LCTRL << 8) | 0x19), LV_EVENT_ALL);
+    create_control_btn(scr_kb_mouse, 260, 98, 52, 28, LV_SYMBOL_KEYBOARD " KB", lv_color_hex(0x0284C7), lv_color_white(),
+                       nav_to_full_kb_cb, NULL, LV_EVENT_CLICKED);
 
     lv_obj_t *h_sep = lv_obj_create(scr_kb_mouse);
     lv_obj_set_pos(h_sep, 156, 130);
@@ -1112,8 +1271,25 @@ static void build_kb_mouse_screen(void) {
     lv_obj_set_style_text_font(lbl_med, &lv_font_montserrat_14, 0);
     lv_obj_set_pos(lbl_med, 156, 138);
 
-    create_control_btn(scr_kb_mouse, 156, 158, 36, 32, "MUTE", lv_color_hex(0x1E293B), lv_color_hex(0xEF4444),
-                       media_key_action_cb, (void*)(uintptr_t)CONSUMER_MUTE, LV_EVENT_ALL);
+    // Loa bật/tắt (Toggle speaker icon thay vì chữ MUTE)
+    lv_obj_t *btn_mute = lv_btn_create(scr_kb_mouse);
+    lv_obj_set_pos(btn_mute, 156, 158);
+    lv_obj_set_size(btn_mute, 36, 32);
+    lv_obj_set_style_bg_color(btn_mute, lv_color_hex(0x1E293B), 0);
+    lv_obj_set_style_radius(btn_mute, 6, 0);
+    lv_obj_set_style_pad_all(btn_mute, 0, 0);
+    lv_obj_set_style_border_color(btn_mute, lv_color_hex(0x475569), 0);
+    lv_obj_set_style_border_width(btn_mute, 1, 0);
+    lv_obj_clear_flag(btn_mute, LV_OBJ_FLAG_SCROLLABLE);
+
+    lbl_mute_icon = lv_label_create(btn_mute);
+    lv_label_set_text(lbl_mute_icon, s_is_muted ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX);
+    lv_obj_set_style_text_color(lbl_mute_icon, s_is_muted ? lv_color_hex(0xEF4444) : lv_color_hex(0x10B981), 0);
+    lv_obj_set_style_text_font(lbl_mute_icon, &lv_font_montserrat_14, 0);
+    lv_obj_center(lbl_mute_icon);
+
+    lv_obj_add_event_cb(btn_mute, mute_btn_action_cb, LV_EVENT_ALL, NULL);
+
     create_control_btn(scr_kb_mouse, 195, 158, 36, 32, "V -", lv_color_hex(0x1E293B), lv_color_hex(0x38BDF8),
                        media_key_action_cb, (void*)(uintptr_t)CONSUMER_VOLUME_DOWN, LV_EVENT_ALL);
     create_control_btn(scr_kb_mouse, 234, 158, 38, 32, "V +", lv_color_hex(0x1E293B), lv_color_hex(0x38BDF8),
@@ -1125,6 +1301,103 @@ static void build_kb_mouse_screen(void) {
                        media_key_action_cb, (void*)(uintptr_t)CONSUMER_SCAN_PREV, LV_EVENT_ALL);
     create_control_btn(scr_kb_mouse, 234, 196, 78, 32, "NEXT " LV_SYMBOL_NEXT, lv_color_hex(0x1E293B), lv_color_hex(0xCBD5E1),
                        media_key_action_cb, (void*)(uintptr_t)CONSUMER_SCAN_NEXT, LV_EVENT_ALL);
+}
+
+// =========================================================================
+// SCREEN 3C: Dedicated Full Virtual Keyboard Window
+// =========================================================================
+static void build_full_kb_screen(void) {
+    scr_full_kb = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(scr_full_kb, lv_color_hex(0x0F172A), 0);
+    lv_obj_set_style_bg_opa(scr_full_kb, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(scr_full_kb, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Textarea ẩn (off-screen) — LVGL keyboard cần có textarea để chuyển mode ABC/1# hoạt động đúng
+    ta_full_kb = lv_textarea_create(scr_full_kb);
+    lv_obj_set_pos(ta_full_kb, -200, -200);
+    lv_obj_set_size(ta_full_kb, 1, 1);
+    lv_textarea_set_max_length(ta_full_kb, 32);
+    lv_obj_add_flag(ta_full_kb, LV_OBJ_FLAG_HIDDEN);
+
+    // TOP BAR (12px) — nút BACK + sóng BLE thu nhỏ gọn
+    lv_obj_t *top_bar = lv_obj_create(scr_full_kb);
+    lv_obj_set_pos(top_bar, 0, 0);
+    lv_obj_set_size(top_bar, 320, 12);
+    lv_obj_set_style_bg_color(top_bar, lv_color_hex(0x1E293B), 0);
+    lv_obj_set_style_bg_opa(top_bar, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(top_bar, 0, 0);
+    lv_obj_set_style_border_width(top_bar, 0, 0);
+    lv_obj_set_style_pad_all(top_bar, 0, 0);
+    lv_obj_clear_flag(top_bar, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *btn_back = lv_btn_create(top_bar);
+    lv_obj_set_size(btn_back, 50, 12);
+    lv_obj_set_pos(btn_back, 2, 0);
+    lv_obj_set_style_bg_color(btn_back, lv_color_hex(0x334155), 0);
+    lv_obj_set_style_radius(btn_back, 3, 0);
+    lv_obj_set_style_pad_all(btn_back, 0, 0);
+    lv_obj_add_event_cb(btn_back, nav_back_to_kb_mouse_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *lbl_back = lv_label_create(btn_back);
+    lv_label_set_text(lbl_back, LV_SYMBOL_LEFT " BACK");
+    lv_obj_set_style_text_color(lbl_back, lv_color_hex(0x38BDF8), 0);
+    lv_obj_set_style_text_font(lbl_back, &lv_font_montserrat_14, 0);
+    lv_obj_center(lbl_back);
+
+    // Mini signal widget trong thanh 12px
+    lv_obj_t *sig_cont = lv_obj_create(top_bar);
+    lv_obj_set_size(sig_cont, 26, 11);
+    lv_obj_set_pos(sig_cont, 288, 0);
+    lv_obj_set_style_bg_opa(sig_cont, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(sig_cont, 0, 0);
+    lv_obj_set_style_pad_all(sig_cont, 0, 0);
+    lv_obj_clear_flag(sig_cont, LV_OBJ_FLAG_SCROLLABLE);
+
+    int sig_h[] = {2, 4, 6, 8};
+    int sig_x[] = {1, 6, 11, 16};
+    lv_obj_t **fkb_bars[] = {&fkb_bar_sig_1, &fkb_bar_sig_2, &fkb_bar_sig_3, &fkb_bar_sig_4};
+    for (int i = 0; i < 4; i++) {
+        lv_obj_t *bar = lv_obj_create(sig_cont);
+        lv_obj_set_pos(bar, sig_x[i], 10 - sig_h[i]);
+        lv_obj_set_size(bar, 3, sig_h[i]);
+        lv_obj_set_style_bg_color(bar, lv_color_hex(0x475569), 0);
+        lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(bar, 1, 0);
+        lv_obj_set_style_border_width(bar, 0, 0);
+        lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
+        *fkb_bars[i] = bar;
+    }
+
+    fkb_lbl_sig_x = lv_label_create(sig_cont);
+    lv_label_set_text(fkb_lbl_sig_x, "x");
+    lv_obj_set_style_text_color(fkb_lbl_sig_x, lv_palette_main(LV_PALETTE_RED), 0);
+    lv_obj_set_style_text_font(fkb_lbl_sig_x, &lv_font_montserrat_14, 0);
+    lv_obj_align(fkb_lbl_sig_x, LV_ALIGN_CENTER, 0, 0);
+
+    // BÀN PHÍM QWERTY — dịch lên 10px (bắt đầu từ Y=12 thay vì Y=22)
+    lv_obj_t *kb = lv_keyboard_create(scr_full_kb);
+    lv_obj_set_size(kb, 320, 218);
+    lv_obj_set_pos(kb, 0, 12);
+    lv_keyboard_set_textarea(kb, ta_full_kb);
+    lv_obj_set_style_bg_color(kb, lv_color_hex(0x0F172A), 0);
+    lv_obj_set_style_bg_opa(kb, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(kb, 0, 0);
+    lv_obj_set_style_pad_row(kb, 3, 0);
+    lv_obj_set_style_pad_column(kb, 3, 0);
+    lv_obj_set_style_pad_left(kb, 4, 0);
+    lv_obj_set_style_pad_right(kb, 4, 0);
+    lv_obj_set_style_pad_top(kb, 3, 0);
+    lv_obj_set_style_pad_bottom(kb, 3, 0);
+
+    // Style phím
+    lv_obj_set_style_bg_color(kb, lv_color_hex(0x1E293B), LV_PART_ITEMS);
+    lv_obj_set_style_text_color(kb, lv_color_white(), LV_PART_ITEMS);
+    lv_obj_set_style_text_font(kb, &lv_font_montserrat_16, LV_PART_ITEMS);
+    lv_obj_set_style_border_color(kb, lv_color_hex(0x334155), LV_PART_ITEMS);
+    lv_obj_set_style_border_width(kb, 1, LV_PART_ITEMS);
+    lv_obj_set_style_radius(kb, 5, LV_PART_ITEMS);
+
+    lv_obj_add_event_cb(kb, full_kb_action_cb, LV_EVENT_VALUE_CHANGED, NULL);
 }
 
 // =========================================================================
@@ -1359,12 +1632,13 @@ esp_err_t display_ui_init(void) {
     assert(lvgl_mux);
     xTaskCreate(lvgl_task, "LVGL", 4 * 1024, NULL, 2, NULL);
 
-    // 10. Build Screens (Console + Home + Gamepad + Keyboard/Mouse)
+    // 10. Build Screens (Console + Home + Gamepad + Keyboard/Mouse + Full Keyboard)
     if (lvgl_lock(-1)) {
         build_console_screen();
         build_home_screen();
         build_gamepad_screen();
         build_kb_mouse_screen();
+        build_full_kb_screen();
         lv_scr_load(scr_console); // Mặc định mở màn hình Dashboard Quota
         set_signal_level(0);       // Khởi động chưa có BLE: hiện dấu x đỏ
 
