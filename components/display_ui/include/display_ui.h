@@ -25,6 +25,11 @@ esp_err_t display_ui_update_quota(const pc_quota_packet_t *quota);
  */
 esp_err_t display_ui_set_backlight(uint8_t brightness_pct);
 
+/**
+ * @brief Chuyển đổi qua lại giữa màn hình Dashboard Quota và Home Clock
+ */
+esp_err_t display_ui_toggle_screen(void);
+
 #ifdef __cplusplus
 }
 #endif
