@@ -282,49 +282,7 @@ static void print_box_line(const char *content) {
 }
 
 static void on_pc_quota_updated(const pc_quota_packet_t *quota) {
-    const char *status_str = "AN TOÀN  🟢";
-    if (quota->alert_level == QUOTA_ALERT_WARNING) {
-        status_str = "CẢNH BÁO 🟡";
-    } else if (quota->alert_level == QUOTA_ALERT_CRITICAL) {
-        status_str = "NGUY CẤP 🔴";
-    }
-
-    const char *border = "+--------------------------------------------------------------------+";
-    char line_buf[256];
-
-    ESP_LOGI(TAG, "%s", border);
-    print_box_line("[PC_SYNC] CAP NHAT DU LIEU QUOTA ANTIGRAVITY QUA BLE");
-    ESP_LOGI(TAG, "%s", border);
-
-    if (quota->time_vn[0] != '\0') {
-        snprintf(line_buf, sizeof(line_buf), "Gio Viet Nam:       %s (UTC+7)", quota->time_vn);
-        print_box_line(line_buf);
-    }
-
-    snprintf(line_buf, sizeof(line_buf), "AI Model:           %s", quota->model_name);
-    print_box_line(line_buf);
-
-    snprintf(line_buf, sizeof(line_buf), "[GEMINI] 5h Limit:   %2d%% [%s]  | Weekly:  %2d%%",
-             quota->antigrav_quota_percent, status_str, quota->gemini_weekly_percent);
-    print_box_line(line_buf);
-
-    snprintf(line_buf, sizeof(line_buf), "[CLAUDE] 5h Limit:  %3d%% [AN TOÀN  🟢]  | Weekly: %3d%%",
-             quota->claude_5h_percent, quota->claude_weekly_percent);
-    print_box_line(line_buf);
-
-    snprintf(line_buf, sizeof(line_buf), "Số Prompts hôm nay: %lu", (unsigned long)quota->prompt_count);
-    print_box_line(line_buf);
-
-    snprintf(line_buf, sizeof(line_buf), "Host PC Telemetry:  CPU: %2d%%            | RAM: %2d%%",
-             quota->cpu_percent, quota->ram_percent);
-    print_box_line(line_buf);
-
-    snprintf(line_buf, sizeof(line_buf), "Trạng thái Module:  %s", pc_sync_state_to_str(pc_sync_get_state()));
-    print_box_line(line_buf);
-
-    ESP_LOGI(TAG, "%s", border);
-
-    // Cập nhật dữ liệu thời gian thực lên màn hình TFT 2.8" LVGL
+    // Temporarily muted during LCD diagnostic to keep serial output 100% clean
     display_ui_update_quota(quota);
 
     // Nếu Quota nguy cấp (<20%), nháy LED đỏ cảnh báo

@@ -1,464 +1,247 @@
+/*
+ * Hardware SPI Test Step 2:
+ * 1. Fix Red/Blue swap: Set MADCTL BGR bit = 0 (RGB mode)
+ * 2. Set Landscape 320x240 (Header on RIGHT: MADCTL = 0xE0)
+ * 3. Draw 4 Quadrants to verify orientation:
+ *    - TOP-LEFT:     RED
+ *    - TOP-RIGHT:    GREEN
+ *    - BOTTOM-LEFT:  BLUE
+ *    - BOTTOM-RIGHT: WHITE
+ */
+
 #include <stdio.h>
 #include <string.h>
-#include "esp_log.h"
-#include "esp_err.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
-#include "driver/ledc.h"
-#include "esp_lcd_panel_io.h"
-#include "esp_lcd_panel_vendor.h"
-#include "esp_lcd_panel_ops.h"
-#include "esp_lcd_ili9341.h"
-#include "esp_lvgl_port.h"
-#include "lvgl.h"
+#include "esp_err.h"
+#include "esp_log.h"
 
 #include "display_ui.h"
 
-static const char *TAG = "DISP_UI";
+static const char *TAG = "HW_DIAG";
 
-// Định nghĩa chân phần cứng thẳng hàng với Module TFT theo docs_for_me/GPIO_Define.md
-#define LCD_HOST               SPI2_HOST
-#define LCD_PIN_CS             GPIO_NUM_14
-#define LCD_PIN_RST            GPIO_NUM_13
-#define LCD_PIN_DC             GPIO_NUM_12
-#define LCD_PIN_MOSI           GPIO_NUM_11
-#define LCD_PIN_CLK            GPIO_NUM_10
-#define LCD_PIN_BL             GPIO_NUM_9
-#define LCD_PIN_MISO           GPIO_NUM_46
+#define LCD_HOST                SPI2_HOST
+#define PIN_NUM_SCLK            GPIO_NUM_10
+#define PIN_NUM_MOSI            GPIO_NUM_11
+#define PIN_NUM_MISO            GPIO_NUM_46
+#define PIN_NUM_DC              GPIO_NUM_12
+#define PIN_NUM_RST             GPIO_NUM_13
+#define PIN_NUM_CS              GPIO_NUM_14
+#define PIN_NUM_BL              GPIO_NUM_9
 
-#define LCD_H_RES              320
-#define LCD_V_RES              240
+#define H_RES                   320
+#define V_RES                   240
 
-#define LCD_BL_LEDC_TIMER      LEDC_TIMER_0
-#define LCD_BL_LEDC_MODE       LEDC_LOW_SPEED_MODE
-#define LCD_BL_LEDC_CHANNEL    LEDC_CHANNEL_0
-#define LCD_BL_LEDC_DUTY_RES   LEDC_TIMER_8_BIT
-#define LCD_BL_LEDC_FREQ_HZ    5000
-
-#if defined(LV_FONT_MONTSERRAT_10) && LV_FONT_MONTSERRAT_10
-#define FONT_SMALL &lv_font_montserrat_10
-#else
-#define FONT_SMALL LV_FONT_DEFAULT
-#endif
-
-#if defined(LV_FONT_MONTSERRAT_12) && LV_FONT_MONTSERRAT_12
-#define FONT_MEDIUM &lv_font_montserrat_12
-#else
-#define FONT_MEDIUM LV_FONT_DEFAULT
-#endif
-
-#if defined(LV_FONT_MONTSERRAT_14) && LV_FONT_MONTSERRAT_14
-#define FONT_LARGE &lv_font_montserrat_14
-#else
-#define FONT_LARGE LV_FONT_DEFAULT
-#endif
-
-static esp_lcd_panel_io_handle_t io_handle = NULL;
-static esp_lcd_panel_handle_t panel_handle = NULL;
-static lv_disp_t *lvgl_disp = NULL;
-
-// Các đối tượng widget trên Dashboard LVGL
-static lv_obj_t *lbl_clock = NULL;
-static lv_obj_t *lbl_model = NULL;
-static lv_obj_t *lbl_ble_status = NULL;
-
-static lv_obj_t *arc_gemini = NULL;
-static lv_obj_t *lbl_gemini_val = NULL;
-static lv_obj_t *bar_gemini_w = NULL;
-static lv_obj_t *lbl_gemini_w_val = NULL;
-
-static lv_obj_t *arc_claude = NULL;
-static lv_obj_t *lbl_claude_val = NULL;
-static lv_obj_t *bar_claude_w = NULL;
-static lv_obj_t *lbl_claude_w_val = NULL;
-
-static lv_obj_t *lbl_prompts = NULL;
-static lv_obj_t *lbl_system = NULL;
-
-static esp_err_t backlight_init(void) {
-    ledc_timer_config_t ledc_timer = {
-        .duty_resolution = LCD_BL_LEDC_DUTY_RES,
-        .freq_hz = LCD_BL_LEDC_FREQ_HZ,
-        .speed_mode = LCD_BL_LEDC_MODE,
-        .timer_num = LCD_BL_LEDC_TIMER,
-        .clk_cfg = LEDC_AUTO_CLK
-    };
-    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
-
-    ledc_channel_config_t ledc_channel = {
-        .channel    = LCD_BL_LEDC_CHANNEL,
-        .duty       = 255, // Mặc định 100% độ sáng
-        .gpio_num   = LCD_PIN_BL,
-        .speed_mode = LCD_BL_LEDC_MODE,
-        .hpoint     = 0,
-        .timer_sel  = LCD_BL_LEDC_TIMER
-    };
-    return ledc_channel_config(&ledc_channel);
-}
+static spi_device_handle_t spi_dev = NULL;
 
 esp_err_t display_ui_set_backlight(uint8_t brightness_pct) {
-    if (brightness_pct > 100) brightness_pct = 100;
-    uint32_t duty = (brightness_pct * 255) / 100;
-    ESP_ERROR_CHECK(ledc_set_duty(LCD_BL_LEDC_MODE, LCD_BL_LEDC_CHANNEL, duty));
-    return ledc_update_duty(LCD_BL_LEDC_MODE, LCD_BL_LEDC_CHANNEL);
-}
-
-static void create_dashboard_ui(void) {
-    lv_obj_t *scr = lv_scr_act();
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x0F172A), 0); // Slate 900 dark background
-
-    // ==========================================
-    // 1. TOP STATUS BAR (H: 26px)
-    // ==========================================
-    lv_obj_t *top_bar = lv_obj_create(scr);
-    lv_obj_set_size(top_bar, 320, 28);
-    lv_obj_align(top_bar, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_bg_color(top_bar, lv_color_hex(0x1E293B), 0);
-    lv_obj_set_style_border_width(top_bar, 0, 0);
-    lv_obj_set_style_radius(top_bar, 0, 0);
-    lv_obj_set_style_pad_all(top_bar, 4, 0);
-    lv_obj_clear_flag(top_bar, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_t *lbl_title = lv_label_create(top_bar);
-    lv_label_set_text(lbl_title, "AI CONSOLE");
-    lv_obj_set_style_text_color(lbl_title, lv_color_hex(0x38BDF8), 0); // Sky 400
-    lv_obj_align(lbl_title, LV_ALIGN_LEFT_MID, 6, 0);
-
-    lbl_clock = lv_label_create(top_bar);
-    lv_label_set_text(lbl_clock, "--:--:--");
-    lv_obj_set_style_text_color(lbl_clock, lv_color_hex(0xF8FAFC), 0); // White
-    lv_obj_align(lbl_clock, LV_ALIGN_CENTER, 0, 0);
-
-    lbl_ble_status = lv_label_create(top_bar);
-    lv_label_set_text(lbl_ble_status, "BLE: OK");
-    lv_obj_set_style_text_color(lbl_ble_status, lv_color_hex(0x22C55E), 0); // Green 500
-    lv_obj_align(lbl_ble_status, LV_ALIGN_RIGHT_MID, -6, 0);
-
-    // ==========================================
-    // 2. MODEL BANNER (H: 20px)
-    // ==========================================
-    lbl_model = lv_label_create(scr);
-    lv_label_set_text(lbl_model, "Model: Gemini 3.8 Flash (High)");
-    lv_obj_set_style_text_color(lbl_model, lv_color_hex(0x94A3B8), 0); // Slate 400
-    lv_obj_set_style_text_font(lbl_model, FONT_SMALL, 0);
-    lv_obj_align(lbl_model, LV_ALIGN_TOP_MID, 0, 32);
-
-    // ==========================================
-    // 3. CARD 1: GEMINI QUOTA (Left: x=8, y=52, w=148, h=146)
-    // ==========================================
-    lv_obj_t *card_gemini = lv_obj_create(scr);
-    lv_obj_set_size(card_gemini, 148, 146);
-    lv_obj_align(card_gemini, LV_ALIGN_TOP_LEFT, 8, 52);
-    lv_obj_set_style_bg_color(card_gemini, lv_color_hex(0x1E293B), 0);
-    lv_obj_set_style_border_color(card_gemini, lv_color_hex(0x334155), 0);
-    lv_obj_set_style_border_width(card_gemini, 1, 0);
-    lv_obj_set_style_radius(card_gemini, 8, 0);
-    lv_obj_set_style_pad_all(card_gemini, 4, 0);
-    lv_obj_clear_flag(card_gemini, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_t *lbl_gem_title = lv_label_create(card_gemini);
-    lv_label_set_text(lbl_gem_title, "GEMINI 5H");
-    lv_obj_set_style_text_color(lbl_gem_title, lv_color_hex(0x38BDF8), 0);
-    lv_obj_set_style_text_font(lbl_gem_title, FONT_MEDIUM, 0);
-    lv_obj_align(lbl_gem_title, LV_ALIGN_TOP_MID, 0, 2);
-
-    arc_gemini = lv_arc_create(card_gemini);
-    lv_obj_set_size(arc_gemini, 80, 80);
-    lv_arc_set_rotation(arc_gemini, 135);
-    lv_arc_set_bg_angles(arc_gemini, 0, 270);
-    lv_arc_set_value(arc_gemini, 100);
-    lv_obj_align(arc_gemini, LV_ALIGN_TOP_MID, 0, 18);
-    lv_obj_remove_style(arc_gemini, NULL, LV_PART_KNOB);
-    lv_obj_clear_flag(arc_gemini, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_arc_width(arc_gemini, 7, LV_PART_MAIN);
-    lv_obj_set_style_arc_width(arc_gemini, 7, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_color(arc_gemini, lv_color_hex(0x334155), LV_PART_MAIN);
-    lv_obj_set_style_arc_color(arc_gemini, lv_color_hex(0x22C55E), LV_PART_INDICATOR);
-
-    lbl_gemini_val = lv_label_create(card_gemini);
-    lv_label_set_text(lbl_gemini_val, "100%");
-    lv_obj_set_style_text_color(lbl_gemini_val, lv_color_hex(0xF8FAFC), 0);
-    lv_obj_set_style_text_font(lbl_gemini_val, FONT_LARGE, 0);
-    lv_obj_align(lbl_gemini_val, LV_ALIGN_TOP_MID, 0, 48);
-
-    lbl_gemini_w_val = lv_label_create(card_gemini);
-    lv_label_set_text(lbl_gemini_w_val, "Weekly: 85%");
-    lv_obj_set_style_text_color(lbl_gemini_w_val, lv_color_hex(0x94A3B8), 0);
-    lv_obj_set_style_text_font(lbl_gemini_w_val, FONT_SMALL, 0);
-    lv_obj_align(lbl_gemini_w_val, LV_ALIGN_BOTTOM_MID, 0, -16);
-
-    bar_gemini_w = lv_bar_create(card_gemini);
-    lv_obj_set_size(bar_gemini_w, 130, 8);
-    lv_obj_align(bar_gemini_w, LV_ALIGN_BOTTOM_MID, 0, -4);
-    lv_bar_set_value(bar_gemini_w, 85, LV_ANIM_OFF);
-    lv_obj_set_style_bg_color(bar_gemini_w, lv_color_hex(0x334155), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(bar_gemini_w, lv_color_hex(0x38BDF8), LV_PART_INDICATOR);
-
-    // ==========================================
-    // 4. CARD 2: CLAUDE & GPT QUOTA (Right: x=164, y=52, w=148, h=146)
-    // ==========================================
-    lv_obj_t *card_claude = lv_obj_create(scr);
-    lv_obj_set_size(card_claude, 148, 146);
-    lv_obj_align(card_claude, LV_ALIGN_TOP_RIGHT, -8, 52);
-    lv_obj_set_style_bg_color(card_claude, lv_color_hex(0x1E293B), 0);
-    lv_obj_set_style_border_color(card_claude, lv_color_hex(0x334155), 0);
-    lv_obj_set_style_border_width(card_claude, 1, 0);
-    lv_obj_set_style_radius(card_claude, 8, 0);
-    lv_obj_set_style_pad_all(card_claude, 4, 0);
-    lv_obj_clear_flag(card_claude, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_t *lbl_cld_title = lv_label_create(card_claude);
-    lv_label_set_text(lbl_cld_title, "CLAUDE 5H");
-    lv_obj_set_style_text_color(lbl_cld_title, lv_color_hex(0xA855F7), 0); // Purple 500
-    lv_obj_set_style_text_font(lbl_cld_title, FONT_MEDIUM, 0);
-    lv_obj_align(lbl_cld_title, LV_ALIGN_TOP_MID, 0, 2);
-
-    arc_claude = lv_arc_create(card_claude);
-    lv_obj_set_size(arc_claude, 80, 80);
-    lv_arc_set_rotation(arc_claude, 135);
-    lv_arc_set_bg_angles(arc_claude, 0, 270);
-    lv_arc_set_value(arc_claude, 100);
-    lv_obj_align(arc_claude, LV_ALIGN_TOP_MID, 0, 18);
-    lv_obj_remove_style(arc_claude, NULL, LV_PART_KNOB);
-    lv_obj_clear_flag(arc_claude, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_arc_width(arc_claude, 7, LV_PART_MAIN);
-    lv_obj_set_style_arc_width(arc_claude, 7, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_color(arc_claude, lv_color_hex(0x334155), LV_PART_MAIN);
-    lv_obj_set_style_arc_color(arc_claude, lv_color_hex(0x22C55E), LV_PART_INDICATOR);
-
-    lbl_claude_val = lv_label_create(card_claude);
-    lv_label_set_text(lbl_claude_val, "100%");
-    lv_obj_set_style_text_color(lbl_claude_val, lv_color_hex(0xF8FAFC), 0);
-    lv_obj_set_style_text_font(lbl_claude_val, FONT_LARGE, 0);
-    lv_obj_align(lbl_claude_val, LV_ALIGN_TOP_MID, 0, 48);
-
-    lbl_claude_w_val = lv_label_create(card_claude);
-    lv_label_set_text(lbl_claude_w_val, "Weekly: 100%");
-    lv_obj_set_style_text_color(lbl_claude_w_val, lv_color_hex(0x94A3B8), 0);
-    lv_obj_set_style_text_font(lbl_claude_w_val, FONT_SMALL, 0);
-    lv_obj_align(lbl_claude_w_val, LV_ALIGN_BOTTOM_MID, 0, -16);
-
-    bar_claude_w = lv_bar_create(card_claude);
-    lv_obj_set_size(bar_claude_w, 130, 8);
-    lv_obj_align(bar_claude_w, LV_ALIGN_BOTTOM_MID, 0, -4);
-    lv_bar_set_value(bar_claude_w, 100, LV_ANIM_OFF);
-    lv_obj_set_style_bg_color(bar_claude_w, lv_color_hex(0x334155), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(bar_claude_w, lv_color_hex(0xA855F7), LV_PART_INDICATOR);
-
-    // ==========================================
-    // 5. BOTTOM BAR: TELEMETRY (H: 26px)
-    // ==========================================
-    lv_obj_t *bot_bar = lv_obj_create(scr);
-    lv_obj_set_size(bot_bar, 320, 26);
-    lv_obj_align(bot_bar, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_bg_color(bot_bar, lv_color_hex(0x020617), 0);
-    lv_obj_set_style_border_width(bot_bar, 0, 0);
-    lv_obj_set_style_radius(bot_bar, 0, 0);
-    lv_obj_set_style_pad_all(bot_bar, 3, 0);
-    lv_obj_clear_flag(bot_bar, LV_OBJ_FLAG_SCROLLABLE);
-
-    lbl_prompts = lv_label_create(bot_bar);
-    lv_label_set_text(lbl_prompts, "Prompts: 0");
-    lv_obj_set_style_text_color(lbl_prompts, lv_color_hex(0xCBD5E1), 0);
-    lv_obj_set_style_text_font(lbl_prompts, FONT_SMALL, 0);
-    lv_obj_align(lbl_prompts, LV_ALIGN_LEFT_MID, 8, 0);
-
-    lbl_system = lv_label_create(bot_bar);
-    lv_label_set_text(lbl_system, "CPU: 0% | RAM: 0%");
-    lv_obj_set_style_text_color(lbl_system, lv_color_hex(0xCBD5E1), 0);
-    lv_obj_set_style_text_font(lbl_system, FONT_SMALL, 0);
-    lv_obj_align(lbl_system, LV_ALIGN_RIGHT_MID, -8, 0);
-}
-
-esp_err_t display_ui_init(void) {
-    ESP_LOGI(TAG, "Initializing LCD Hardware and LVGL Port...");
-
-    // 1. Khởi tạo đèn nền LCD
-    backlight_init();
-    display_ui_set_backlight(100);
-
-    // 2. Cấu hình SPI Bus
-    spi_bus_config_t buscfg = {
-        .sclk_io_num = LCD_PIN_CLK,
-        .mosi_io_num = LCD_PIN_MOSI,
-        .miso_io_num = LCD_PIN_MISO,
-        .quadwp_io_num = -1,
-        .quadhd_io_num = -1,
-        .max_transfer_sz = LCD_H_RES * 40 * sizeof(uint16_t),
-    };
-    esp_err_t ret = spi_bus_initialize(LCD_HOST, &buscfg, SPI_DMA_CH_AUTO);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initialize SPI Bus: %s", esp_err_to_name(ret));
-        return ret;
-    }
-
-    // 3. Cấu hình Panel IO
-    esp_lcd_panel_io_spi_config_t io_config = {
-        .dc_gpio_num = LCD_PIN_DC,
-        .cs_gpio_num = LCD_PIN_CS,
-        .pclk_hz = 40 * 1000 * 1000,
-        .lcd_cmd_bits = 8,
-        .lcd_param_bits = 8,
-        .spi_mode = 0,
-        .trans_queue_depth = 10,
-    };
-    ret = esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)LCD_HOST, &io_config, &io_handle);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to create panel IO: %s", esp_err_to_name(ret));
-        return ret;
-    }
-
-    // 4. Khởi tạo driver panel ILI9341
-    esp_lcd_panel_dev_config_t panel_config = {
-        .reset_gpio_num = LCD_PIN_RST,
-        .rgb_endian = LCD_RGB_ENDIAN_BGR,
-        .bits_per_pixel = 16,
-    };
-    ret = esp_lcd_new_panel_ili9341(io_handle, &panel_config, &panel_handle);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to create ILI9341 panel: %s", esp_err_to_name(ret));
-        return ret;
-    }
-
-    esp_lcd_panel_reset(panel_handle);
-    esp_lcd_panel_init(panel_handle);
-    esp_lcd_panel_invert_color(panel_handle, true); // Sửa màu âm bản (chuyển nền trắng thành nền đen Slate)
-    esp_lcd_panel_swap_xy(panel_handle, true);      // Xoay ngang màn hình (Landscape 320x240)
-    esp_lcd_panel_mirror(panel_handle, true, false);// Sửa chữ bị lật ngược gương
-    esp_lcd_panel_disp_on_off(panel_handle, true);
-
-    // 5. Khởi tạo LVGL Port Task
-    lvgl_port_cfg_t port_cfg = ESP_LVGL_PORT_INIT_CONFIG();
-    port_cfg.task_stack = 8192;
-    port_cfg.task_priority = 4;
-    ret = lvgl_port_init(&port_cfg);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initialize LVGL port: %s", esp_err_to_name(ret));
-        return ret;
-    }
-
-    // 6. Đăng ký màn hình vào LVGL
-    lvgl_port_display_cfg_t disp_cfg = {
-        .io_handle = io_handle,
-        .panel_handle = panel_handle,
-        .control_handle = panel_handle,
-        .buffer_size = LCD_H_RES * 20, // 20 dòng buffer
-        .double_buffer = true,
-        .hres = LCD_H_RES,
-        .vres = LCD_V_RES,
-        .monochrome = false,
-        .rotation = {
-            .swap_xy = true,  // Màn hình ngang (Landscape 320x240)
-            .mirror_x = true, // Đảo mirror_x để chữ đọc xuôi từ trái qua phải
-            .mirror_y = false,
-        },
-        .flags = {
-            .buff_dma = true,
-        }
-    };
-    lvgl_disp = lvgl_port_add_disp(&disp_cfg);
-    if (!lvgl_disp) {
-        ESP_LOGE(TAG, "Failed to add display to LVGL");
-        return ESP_FAIL;
-    }
-
-    // 7. Tạo giao diện đồ họa Dashboard
-    if (lvgl_port_lock(0)) {
-        create_dashboard_ui();
-        lvgl_port_unlock();
-    }
-
-    ESP_LOGI(TAG, "✨ LVGL v8 Display UI initialized successfully (320x240 Landscape)");
+    gpio_set_level(PIN_NUM_BL, brightness_pct > 0 ? 1 : 0);
     return ESP_OK;
 }
 
 esp_err_t display_ui_update_quota(const pc_quota_packet_t *quota) {
-    if (!quota) return ESP_ERR_INVALID_ARG;
-    if (!lvgl_disp) return ESP_ERR_INVALID_STATE;
+    return ESP_OK;
+}
 
-    if (lvgl_port_lock(0)) {
-        // Cập nhật Giờ Việt Nam
-        if (lbl_clock && quota->time_vn[0] != '\0') {
-            lv_label_set_text(lbl_clock, quota->time_vn);
-        }
+static void send_cmd(uint8_t cmd) {
+    gpio_set_level(PIN_NUM_DC, 0);
+    spi_transaction_t t = {
+        .length = 8,
+        .tx_buffer = &cmd,
+    };
+    spi_device_polling_transmit(spi_dev, &t);
+}
 
-        // Cập nhật Model AI
-        if (lbl_model && quota->model_name[0] != '\0') {
-            char buf[64];
-            snprintf(buf, sizeof(buf), "Model: %s", quota->model_name);
-            lv_label_set_text(lbl_model, buf);
-        }
+static void send_data(const uint8_t *data, size_t len) {
+    if (len == 0) return;
+    gpio_set_level(PIN_NUM_DC, 1);
+    spi_transaction_t t = {
+        .length = len * 8,
+        .tx_buffer = data,
+    };
+    spi_device_polling_transmit(spi_dev, &t);
+}
 
-        // Cập nhật Gemini 5h Quota
-        if (arc_gemini) {
-            lv_arc_set_value(arc_gemini, quota->antigrav_quota_percent);
-            lv_color_t gem_col = lv_color_hex(0x22C55E); // Green
-            if (quota->alert_level == QUOTA_ALERT_CRITICAL) {
-                gem_col = lv_color_hex(0xEF4444); // Red
-            } else if (quota->alert_level == QUOTA_ALERT_WARNING) {
-                gem_col = lv_color_hex(0xEAB308); // Yellow
-            }
-            lv_obj_set_style_arc_color(arc_gemini, gem_col, LV_PART_INDICATOR);
-        }
-        if (lbl_gemini_val) {
-            char buf[16];
-            snprintf(buf, sizeof(buf), "%d%%", quota->antigrav_quota_percent);
-            lv_label_set_text(lbl_gemini_val, buf);
-        }
+static void set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
+    send_cmd(0x2A); // CASET (Column: 0..319)
+    uint8_t caset[] = { (uint8_t)(x0 >> 8), (uint8_t)(x0 & 0xFF), (uint8_t)(x1 >> 8), (uint8_t)(x1 & 0xFF) };
+    send_data(caset, 4);
 
-        // Cập nhật Gemini Weekly Quota
-        if (bar_gemini_w) {
-            lv_bar_set_value(bar_gemini_w, quota->gemini_weekly_percent, LV_ANIM_ON);
-        }
-        if (lbl_gemini_w_val) {
-            char buf[32];
-            snprintf(buf, sizeof(buf), "Weekly: %d%%", quota->gemini_weekly_percent);
-            lv_label_set_text(lbl_gemini_w_val, buf);
-        }
+    send_cmd(0x2B); // RASET (Row: 0..239)
+    uint8_t raset[] = { (uint8_t)(y0 >> 8), (uint8_t)(y0 & 0xFF), (uint8_t)(y1 >> 8), (uint8_t)(y1 & 0xFF) };
+    send_data(raset, 4);
 
-        // Cập nhật Claude 5h Quota
-        if (arc_claude) {
-            lv_arc_set_value(arc_claude, quota->claude_5h_percent);
-            lv_color_t cld_col = lv_color_hex(0x22C55E);
-            if (quota->claude_5h_percent < 20) {
-                cld_col = lv_color_hex(0xEF4444);
-            } else if (quota->claude_5h_percent < 50) {
-                cld_col = lv_color_hex(0xEAB308);
-            }
-            lv_obj_set_style_arc_color(arc_claude, cld_col, LV_PART_INDICATOR);
-        }
-        if (lbl_claude_val) {
-            char buf[16];
-            snprintf(buf, sizeof(buf), "%d%%", quota->claude_5h_percent);
-            lv_label_set_text(lbl_claude_val, buf);
-        }
+    send_cmd(0x2C); // RAMWR
+}
 
-        // Cập nhật Claude Weekly Quota
-        if (bar_claude_w) {
-            lv_bar_set_value(bar_claude_w, quota->claude_weekly_percent, LV_ANIM_ON);
-        }
-        if (lbl_claude_w_val) {
-            char buf[32];
-            snprintf(buf, sizeof(buf), "Weekly: %d%%", quota->claude_weekly_percent);
-            lv_label_set_text(lbl_claude_w_val, buf);
-        }
+#define SWAP_BYTES(v) ((uint16_t)(((uint16_t)(v) >> 8) | (((uint16_t)(v) & 0xFF) << 8)))
 
-        // Cập nhật Prompts
-        if (lbl_prompts) {
-            char buf[32];
-            snprintf(buf, sizeof(buf), "Prompts: %lu", (unsigned long)quota->prompt_count);
-            lv_label_set_text(lbl_prompts, buf);
-        }
+static void fill_solid_color(uint16_t color_rgb565) {
+    set_window(0, 0, H_RES - 1, V_RES - 1);
 
-        // Cập nhật CPU & RAM
-        if (lbl_system) {
-            char buf[32];
-            snprintf(buf, sizeof(buf), "CPU: %d%% | RAM: %d%%", quota->cpu_percent, quota->ram_percent);
-            lv_label_set_text(lbl_system, buf);
-        }
-
-        lvgl_port_unlock();
+    static uint16_t line_buf[H_RES];
+    uint16_t be_color = SWAP_BYTES(color_rgb565);
+    for (int i = 0; i < H_RES; i++) {
+        line_buf[i] = be_color;
     }
+
+    gpio_set_level(PIN_NUM_DC, 1);
+    for (int y = 0; y < V_RES; y++) {
+        spi_transaction_t t = {
+            .length = H_RES * 16,
+            .tx_buffer = line_buf,
+        };
+        spi_device_polling_transmit(spi_dev, &t);
+    }
+}
+
+static void draw_4_quadrants(void) {
+    set_window(0, 0, H_RES - 1, V_RES - 1);
+
+    static uint16_t line_buf[H_RES];
+    uint16_t c_red   = SWAP_BYTES(0xF800);
+    uint16_t c_green = SWAP_BYTES(0x07E0);
+    uint16_t c_blue  = SWAP_BYTES(0x001F);
+    uint16_t c_white = SWAP_BYTES(0xFFFF);
+    uint16_t c_black = 0x0000;
+
+    gpio_set_level(PIN_NUM_DC, 1);
+    for (int y = 0; y < V_RES; y++) {
+        for (int x = 0; x < H_RES; x++) {
+            // 3px black outer border
+            if (x < 3 || x >= H_RES - 3 || y < 3 || y >= V_RES - 3) {
+                line_buf[x] = c_black;
+            }
+            // 2px center crosshair
+            else if (x == 159 || x == 160 || y == 119 || y == 120) {
+                line_buf[x] = c_black;
+            }
+            // Top-Left: RED
+            else if (x < 160 && y < 120) {
+                line_buf[x] = c_red;
+            }
+            // Top-Right: GREEN
+            else if (x >= 160 && y < 120) {
+                line_buf[x] = c_green;
+            }
+            // Bottom-Left: BLUE
+            else if (x < 160 && y >= 120) {
+                line_buf[x] = c_blue;
+            }
+            // Bottom-Right: WHITE
+            else {
+                line_buf[x] = c_white;
+            }
+        }
+        spi_transaction_t t = {
+            .length = H_RES * 16,
+            .tx_buffer = line_buf,
+        };
+        spi_device_polling_transmit(spi_dev, &t);
+    }
+}
+
+static void diag_task(void *arg) {
+    vTaskDelay(pdMS_TO_TICKS(500));
+
+    while (1) {
+        ESP_LOGI(TAG, "--------------------------------------------------------");
+        ESP_LOGI(TAG, "  🔴 DANG XUAT: DO THUAN (RED - 0xF800) | Full 320x240  ");
+        ESP_LOGI(TAG, "--------------------------------------------------------");
+        fill_solid_color(0xF800);
+        vTaskDelay(pdMS_TO_TICKS(3000));
+
+        ESP_LOGI(TAG, "--------------------------------------------------------");
+        ESP_LOGI(TAG, "  🟢 DANG XUAT: XANH LA (GREEN - 0x07E0) | Full 320x240 ");
+        ESP_LOGI(TAG, "--------------------------------------------------------");
+        fill_solid_color(0x07E0);
+        vTaskDelay(pdMS_TO_TICKS(3000));
+
+        ESP_LOGI(TAG, "--------------------------------------------------------");
+        ESP_LOGI(TAG, "  🔵 DANG XUAT: XANH DUONG (BLUE - 0x001F) | Full 320x240");
+        ESP_LOGI(TAG, "--------------------------------------------------------");
+        fill_solid_color(0x001F);
+        vTaskDelay(pdMS_TO_TICKS(3000));
+
+        ESP_LOGI(TAG, "--------------------------------------------------------");
+        ESP_LOGI(TAG, "  🎯 DANG XUAT: 4 O GOC LANDSCAPE (320x240)             ");
+        ESP_LOGI(TAG, "     TREN-TRAI : 🔴 DO        | TREN-PHAI : 🟢 XANH LA ");
+        ESP_LOGI(TAG, "     DUOI-TRAI : 🔵 XANH DUONG| DUOI-PHAI : ⚪ TRANG   ");
+        ESP_LOGI(TAG, "--------------------------------------------------------");
+        draw_4_quadrants();
+        vTaskDelay(pdMS_TO_TICKS(6000));
+    }
+}
+
+esp_err_t display_ui_init(void) {
+    ESP_LOGI(TAG, "=================================================");
+    ESP_LOGI(TAG, "   STEP 2: LANDSCAPE 320x240 + RGB COLOR FIX    ");
+    ESP_LOGI(TAG, "=================================================");
+
+    // Backlight ON
+    gpio_config_t bk_conf = {
+        .mode = GPIO_MODE_OUTPUT,
+        .pin_bit_mask = 1ULL << PIN_NUM_BL,
+    };
+    gpio_config(&bk_conf);
+    gpio_set_level(PIN_NUM_BL, 1);
+
+    // DC and RST GPIO
+    gpio_config_t io_conf = {
+        .mode = GPIO_MODE_OUTPUT,
+        .pin_bit_mask = (1ULL << PIN_NUM_DC) | (1ULL << PIN_NUM_RST),
+    };
+    gpio_config(&io_conf);
+
+    // Hardware Reset
+    gpio_set_level(PIN_NUM_RST, 0);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    gpio_set_level(PIN_NUM_RST, 1);
+    vTaskDelay(pdMS_TO_TICKS(150));
+
+    // SPI Bus init
+    spi_bus_config_t buscfg = {
+        .sclk_io_num = PIN_NUM_SCLK,
+        .mosi_io_num = PIN_NUM_MOSI,
+        .miso_io_num = PIN_NUM_MISO,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+        .max_transfer_sz = H_RES * V_RES * 2,
+    };
+    ESP_ERROR_CHECK(spi_bus_initialize(LCD_HOST, &buscfg, SPI_DMA_CH_AUTO));
+
+    // SPI Device
+    spi_device_interface_config_t devcfg = {
+        .clock_speed_hz = 20 * 1000 * 1000,
+        .mode = 0,
+        .spics_io_num = PIN_NUM_CS,
+        .queue_size = 7,
+    };
+    ESP_ERROR_CHECK(spi_bus_add_device(LCD_HOST, &devcfg, &spi_dev));
+
+    // 1. Sleep Out
+    send_cmd(0x11);
+    vTaskDelay(pdMS_TO_TICKS(120));
+
+    // 2. Pixel format: 16-bit RGB565
+    send_cmd(0x3A);
+    uint8_t colmod[] = { 0x55 };
+    send_data(colmod, 1);
+
+    // 3. Landscape 320x240 (Header on RIGHT) + RGB color mode (BGR bit = 0)
+    // MADCTL bits: MY(0x80) | MX(0x00) | MV(0x20) = 0xA0 (Un-mirrored horizontal)
+    send_cmd(0x36);
+    uint8_t madctl[] = { 0xA0 };
+    send_data(madctl, 1);
+
+    // 4. Display ON
+    send_cmd(0x29);
+    vTaskDelay(pdMS_TO_TICKS(50));
+
+    ESP_LOGI(TAG, "Launching test task: Full Red -> Green -> Blue -> 4 Quadrants");
+    xTaskCreate(diag_task, "diag_task", 3072, NULL, 5, NULL);
 
     return ESP_OK;
 }
