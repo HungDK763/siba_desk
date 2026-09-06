@@ -129,6 +129,20 @@ def get_vietnam_time():
     dt_vn = datetime.fromtimestamp(real_now_ts, tz=tz_vn)
     return dt_vn.strftime("%H:%M:%S")
 
+def get_vietnam_date():
+    """Lấy ngày tháng kiểu iOS Lock Screen (Ví dụ: Th 7 6 thg 9)."""
+    sync_ntp_offset()
+    tz_vn = timezone(timedelta(hours=7))
+    real_now_ts = time.time() + g_cached_time["offset"]
+    dt_vn = datetime.fromtimestamp(real_now_ts, tz=tz_vn)
+    weekday_map = {
+        0: "Th 2", 1: "Th 3", 2: "Th 4", 3: "Th 5",
+        4: "Th 6", 5: "Th 7", 6: "CN"
+    }
+    wd = weekday_map.get(dt_vn.weekday(), "Th")
+    return f"{wd},  {dt_vn.day} thg {dt_vn.month}"
+
+
 def find_language_server():
     """Tìm port và CSRF token của Antigravity/Agy (Chỉ quét khi chưa cache hoặc tiến trình cũ đã chết)."""
     global g_cached_lsp
@@ -211,11 +225,32 @@ def fetch_antigravity_live_quota():
 
     return None
 
+def parse_reset_time_str(reset_time_iso):
+    """Tính chuỗi thời gian đếm ngược (ví dụ 04:45) từ resetTime ISO 8601."""
+    if not reset_time_iso:
+        return "05:00"
+    try:
+        s = reset_time_iso.strip()
+        if s.endswith('Z'):
+            s = s[:-1] + '+00:00'
+        dt = datetime.fromisoformat(s)
+        now_ts = datetime.now(timezone.utc).timestamp()
+        diff = int(dt.timestamp() - now_ts)
+        if diff <= 0:
+            return "00:00"
+        h = diff // 3600
+        m = (diff % 3600) // 60
+        return f"{h:02d}:{m:02d}"
+    except Exception:
+        return "05:00"
+
 def parse_quota_response(response):
     gemini_5h = None
     gemini_weekly = None
     claude_5h = None
     claude_weekly = None
+    gemini_reset = "04:45"
+    claude_reset = "05:00"
     
     for grp in response.get('groups', []):
         display_name = grp.get('displayName', '').lower()
@@ -224,14 +259,19 @@ def parse_quota_response(response):
             bid = b.get('bucketId', '').lower()
             frac = b.get('remainingFraction', 1.0)
             pct = int(round(frac * 100))
+            reset_t = b.get('resetTime')
             if 'gemini' in display_name or 'gemini' in bid:
                 if '5h' in bid:
                     gemini_5h = pct
+                    if reset_t:
+                        gemini_reset = parse_reset_time_str(reset_t)
                 elif 'weekly' in bid:
                     gemini_weekly = pct
             elif 'claude' in display_name or '3p' in bid:
                 if '5h' in bid:
                     claude_5h = pct
+                    if reset_t:
+                        claude_reset = parse_reset_time_str(reset_t)
                 elif 'weekly' in bid:
                     claude_weekly = pct
 
@@ -240,6 +280,8 @@ def parse_quota_response(response):
         "gemini_weekly": gemini_weekly if gemini_weekly is not None else 100,
         "claude_5h": claude_5h if claude_5h is not None else 100,
         "claude_weekly": claude_weekly if claude_weekly is not None else 100,
+        "gemini_reset": gemini_reset,
+        "claude_reset": claude_reset,
     }
 
 def get_antigravity_stats():
@@ -398,13 +440,18 @@ async def run_daemon_loop(args):
             stats = get_antigravity_stats()
             cpu, ram = get_system_telemetry()
             vn_time = get_vietnam_time()
+            vn_date = get_vietnam_date()
             
+            g_reset = "04:45"
+            c_reset = "05:00"
             live_quota = fetch_antigravity_live_quota()
             if live_quota:
                 g_5h = live_quota["gemini_5h"]
                 g_w = live_quota["gemini_weekly"]
                 c_5h = live_quota["claude_5h"]
                 c_w = live_quota["claude_weekly"]
+                g_reset = live_quota.get("gemini_reset", "04:45")
+                c_reset = live_quota.get("claude_reset", "05:00")
             else:
                 max_est = 100
                 used = min(stats["prompts_today"], max_est)
@@ -419,10 +466,13 @@ async def run_daemon_loop(args):
             quota_packet = {
                 "model": stats["model_name"],
                 "time": vn_time,
+                "date": vn_date,
                 "quota": g_5h,
                 "g_w": g_w,
                 "c_5h": c_5h,
                 "c_w": c_w,
+                "g_reset": g_reset,
+                "c_reset": c_reset,
                 "prompts": stats["prompts_today"],
                 "cpu": cpu,
                 "ram": ram
@@ -431,7 +481,7 @@ async def run_daemon_loop(args):
             payload_str = json.dumps(quota_packet)
             payload_bytes = payload_str.encode("utf-8")
 
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] VN: {vn_time} | Quota: {g_5h}% (G-5h), {g_w}% (G-W) | Model: {quota_packet['model']} | CPU: {cpu}% RAM: {ram}%", flush=True)
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] VN: {vn_time} ({vn_date}) | G-5h: {g_5h}% (Reset: {g_reset}) | C-5h: {c_5h}% (Reset: {c_reset}) | CPU: {cpu}% RAM: {ram}%", flush=True)
 
             await send_via_dbus_cached(payload_bytes, target_addr)
 

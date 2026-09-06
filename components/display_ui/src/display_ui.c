@@ -22,6 +22,8 @@
 
 #include "display_ui.h"
 #include "touch_xpt2046.h"
+#include "earth_wallpaper.h"
+#include "ios_fonts.h"
 
 static const char *TAG = "DISP_UI";
 
@@ -54,10 +56,12 @@ static lv_obj_t *scr_home = NULL;
 static lv_obj_t *lbl_clock = NULL;
 static lv_obj_t *arc_gemini = NULL;
 static lv_obj_t *lbl_gemini_val = NULL;
+static lv_obj_t *lbl_gem_sub = NULL;
 static lv_obj_t *bar_gemini_w = NULL;
 
 static lv_obj_t *arc_claude = NULL;
 static lv_obj_t *lbl_claude_val = NULL;
+static lv_obj_t *lbl_cld_sub = NULL;
 static lv_obj_t *bar_claude_w = NULL;
 
 static lv_obj_t *lbl_system = NULL;
@@ -326,9 +330,10 @@ static void build_console_screen(void) {
     lv_obj_set_style_text_font(lbl_gemini_val, &lv_font_montserrat_20, 0);
     lv_obj_center(lbl_gemini_val);
 
-    lv_obj_t *lbl_gem_sub = lv_label_create(card_gemini);
-    lv_label_set_text(lbl_gem_sub, "5h Limit");
-    lv_obj_set_style_text_color(lbl_gem_sub, lv_color_hex(0x64748B), 0);
+    // Thời gian đếm ngược reset quota 5h Gemini (thay thế chữ 5h Limit)
+    lbl_gem_sub = lv_label_create(card_gemini);
+    lv_label_set_text(lbl_gem_sub, "04:45");
+    lv_obj_set_style_text_color(lbl_gem_sub, lv_color_hex(0x94A3B8), 0);
     lv_obj_set_style_text_font(lbl_gem_sub, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl_gem_sub, LV_ALIGN_TOP_MID, 0, 118);
 
@@ -384,9 +389,10 @@ static void build_console_screen(void) {
     lv_obj_set_style_text_font(lbl_claude_val, &lv_font_montserrat_20, 0);
     lv_obj_center(lbl_claude_val);
 
-    lv_obj_t *lbl_cld_sub = lv_label_create(card_claude);
-    lv_label_set_text(lbl_cld_sub, "5h Limit");
-    lv_obj_set_style_text_color(lbl_cld_sub, lv_color_hex(0x64748B), 0);
+    // Thời gian đếm ngược reset quota 5h Claude (thay thế chữ 5h Limit)
+    lbl_cld_sub = lv_label_create(card_claude);
+    lv_label_set_text(lbl_cld_sub, "05:00");
+    lv_obj_set_style_text_color(lbl_cld_sub, lv_color_hex(0x94A3B8), 0);
     lv_obj_set_style_text_font(lbl_cld_sub, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl_cld_sub, LV_ALIGN_TOP_MID, 0, 118);
 
@@ -441,32 +447,31 @@ static void build_console_screen(void) {
 // =========================================================================
 // SCREEN 2: Home Screen (Giant Clock + Calendar + Mini Quota)
 // =========================================================================
+// =========================================================================
+// SCREEN 2: Home Screen (Giant Clock + Calendar + Mini Quota)
+// =========================================================================
 static void build_home_screen(void) {
     scr_home = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(scr_home, lv_color_hex(0x0F172A), 0);
-    lv_obj_set_style_bg_opa(scr_home, LV_OPA_COVER, 0);
     lv_obj_clear_flag(scr_home, LV_OBJ_FLAG_SCROLLABLE);
 
     // Cho phép chạm vào bất kỳ đâu trên màn hình Home để chuyển về Console
     lv_obj_add_event_cb(scr_home, nav_to_console_cb, LV_EVENT_CLICKED, NULL);
 
-    // 1. TOP BAR (Height: 28px)
-    lv_obj_t *top_bar = lv_obj_create(scr_home);
-    lv_obj_set_pos(top_bar, 0, 0);
-    lv_obj_set_size(top_bar, 320, 28);
-    lv_obj_set_style_bg_color(top_bar, lv_color_hex(0x1E293B), 0);
-    lv_obj_set_style_bg_opa(top_bar, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(top_bar, 0, 0);
-    lv_obj_set_style_border_width(top_bar, 0, 0);
-    lv_obj_set_style_pad_all(top_bar, 0, 0);
-    lv_obj_clear_flag(top_bar, LV_OBJ_FLAG_SCROLLABLE);
+    // 1. BACKGROUND: Hình nền Trái Đất chụp từ không gian (320x240)
+    lv_obj_t *bg_img = lv_img_create(scr_home);
+    lv_img_set_src(bg_img, &img_earth_wallpaper);
+    lv_obj_set_pos(bg_img, 0, 0);
+    lv_obj_set_size(bg_img, 320, 240);
+    lv_obj_clear_flag(bg_img, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Nút chuyển lại Dashboard Console
-    lv_obj_t *btn_back = lv_btn_create(top_bar);
-    lv_obj_set_size(btn_back, 74, 22);
-    lv_obj_align(btn_back, LV_ALIGN_LEFT_MID, 8, 0);
-    lv_obj_set_style_bg_color(btn_back, lv_color_hex(0x334155), 0);
-    lv_obj_set_style_radius(btn_back, 4, 0);
+    // 2. FLOATING TOP CONTROLS
+    // Nút chuyển lại Dashboard Console (Bỏ khung viền hoàn toàn theo yêu cầu)
+    lv_obj_t *btn_back = lv_btn_create(scr_home);
+    lv_obj_set_size(btn_back, 84, 26);
+    lv_obj_set_pos(btn_back, 4, 4);
+    lv_obj_set_style_bg_opa(btn_back, LV_OPA_TRANSP, 0);       // Bỏ màu nền
+    lv_obj_set_style_border_width(btn_back, 0, 0);             // Bỏ khung viền
+    lv_obj_set_style_shadow_width(btn_back, 0, 0);             // Bỏ bóng
     lv_obj_set_style_pad_all(btn_back, 0, 0);
     lv_obj_add_event_cb(btn_back, nav_to_console_cb, LV_EVENT_CLICKED, NULL);
 
@@ -474,36 +479,44 @@ static void build_home_screen(void) {
     lv_label_set_text(lbl_back, LV_SYMBOL_LEFT " QUOTA");
     lv_obj_set_style_text_color(lbl_back, lv_color_hex(0x38BDF8), 0);
     lv_obj_set_style_text_font(lbl_back, &lv_font_montserrat_14, 0);
-    lv_obj_center(lbl_back);
+    lv_obj_align(lbl_back, LV_ALIGN_LEFT_MID, 6, 0);
 
-    // Cột sóng BLE góc phải
-    lv_obj_t *sig_cont = create_signal_widget(top_bar, &h_bar_sig_1, &h_bar_sig_2, &h_bar_sig_3, &h_bar_sig_4, &h_lbl_sig_x);
-    lv_obj_align(sig_cont, LV_ALIGN_RIGHT_MID, -12, 0);
+    // Cột sóng BLE góc phải (Trong suốt, không viền)
+    lv_obj_t *sig_pill = lv_obj_create(scr_home);
+    lv_obj_set_size(sig_pill, 40, 24);
+    lv_obj_set_pos(sig_pill, 272, 4);
+    lv_obj_set_style_bg_opa(sig_pill, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(sig_pill, 0, 0);
+    lv_obj_set_style_pad_all(sig_pill, 0, 0);
+    lv_obj_clear_flag(sig_pill, LV_OBJ_FLAG_SCROLLABLE);
 
-    // 2. GIANT DESK CLOCK (Montserrat 40)
+    lv_obj_t *sig_cont = create_signal_widget(sig_pill, &h_bar_sig_1, &h_bar_sig_2, &h_bar_sig_3, &h_bar_sig_4, &h_lbl_sig_x);
+    lv_obj_center(sig_cont);
+
+    // 3. GIANT iPHONE CLOCK (Hạ thấp xuống đúng chính giữa màn hình)
     lbl_home_big_clock = lv_label_create(scr_home);
-    lv_label_set_text(lbl_home_big_clock, "--:--:--");
-    lv_obj_set_style_text_color(lbl_home_big_clock, lv_color_hex(0x38BDF8), 0);
-    lv_obj_set_style_text_font(lbl_home_big_clock, &lv_font_montserrat_40, 0);
-    lv_obj_align(lbl_home_big_clock, LV_ALIGN_CENTER, 0, -32);
+    lv_label_set_text(lbl_home_big_clock, "21:49");
+    lv_obj_set_style_text_color(lbl_home_big_clock, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lbl_home_big_clock, &font_sf_pro_rounded_60, 0);
+    lv_obj_align(lbl_home_big_clock, LV_ALIGN_CENTER, 0, -10);
 
-    // 3. CALENDAR SUBTITLE
+    // 4. DATE SUBTITLE (Thứ cách ngày tháng, đặt cao hơn 10px)
     lbl_home_calendar = lv_label_create(scr_home);
-    lv_label_set_text(lbl_home_calendar, "AI Developer Desk Console");
-    lv_obj_set_style_text_color(lbl_home_calendar, lv_color_hex(0x94A3B8), 0);
-    lv_obj_set_style_text_font(lbl_home_calendar, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_home_calendar, LV_ALIGN_CENTER, 0, 10);
+    lv_label_set_text(lbl_home_calendar, "CN,  6 thg 9");
+    lv_obj_set_style_text_color(lbl_home_calendar, lv_color_hex(0xE2E8F0), 0);
+    lv_obj_set_style_text_font(lbl_home_calendar, &font_sf_pro_rounded_16, 0);
+    lv_obj_align_to(lbl_home_calendar, lbl_home_big_clock, LV_ALIGN_OUT_TOP_MID, 0, -18);
 
-    // 4. MINI QUOTA WIDGET (Panel mini bo góc ở đáy)
+    // 5. MINI QUOTA WIDGET (Thẻ kính mờ nổi trên vòm khí quyển Trái Đất)
     lv_obj_t *panel_mini = lv_obj_create(scr_home);
-    lv_obj_set_size(panel_mini, 290, 48);
-    lv_obj_set_style_bg_color(panel_mini, lv_color_hex(0x162032), 0);
-    lv_obj_set_style_bg_opa(panel_mini, LV_OPA_COVER, 0);
+    lv_obj_set_size(panel_mini, 304, 52);
+    lv_obj_set_style_bg_color(panel_mini, lv_color_hex(0x0B1329), 0);
+    lv_obj_set_style_bg_opa(panel_mini, LV_OPA_80, 0);
     lv_obj_set_style_border_color(panel_mini, lv_color_hex(0x334155), 0);
     lv_obj_set_style_border_width(panel_mini, 1, 0);
-    lv_obj_set_style_radius(panel_mini, 8, 0);
+    lv_obj_set_style_radius(panel_mini, 12, 0);
     lv_obj_set_style_pad_all(panel_mini, 0, 0);
-    lv_obj_align(panel_mini, LV_ALIGN_BOTTOM_MID, 0, -12);
+    lv_obj_align(panel_mini, LV_ALIGN_BOTTOM_MID, 0, -8);
     lv_obj_clear_flag(panel_mini, LV_OBJ_FLAG_SCROLLABLE);
 
     // Gemini Mini
@@ -511,27 +524,27 @@ static void build_home_screen(void) {
     lv_label_set_text(lbl_mg, "GEMINI");
     lv_obj_set_style_text_color(lbl_mg, lv_color_hex(0x38BDF8), 0);
     lv_obj_set_style_text_font(lbl_mg, &lv_font_montserrat_14, 0);
-    lv_obj_set_pos(lbl_mg, 10, 6);
+    lv_obj_set_pos(lbl_mg, 12, 6);
 
     bar_home_gemini = lv_bar_create(panel_mini);
-    lv_obj_set_size(bar_home_gemini, 85, 8);
+    lv_obj_set_size(bar_home_gemini, 88, 8);
     lv_bar_set_range(bar_home_gemini, 0, 100);
     lv_bar_set_value(bar_home_gemini, 90, LV_ANIM_OFF);
     lv_obj_set_style_bg_color(bar_home_gemini, lv_color_hex(0x1E293B), LV_PART_MAIN);
     lv_obj_set_style_bg_color(bar_home_gemini, lv_color_hex(0x38BDF8), LV_PART_INDICATOR);
     lv_obj_set_style_radius(bar_home_gemini, 3, 0);
-    lv_obj_set_pos(bar_home_gemini, 10, 26);
+    lv_obj_set_pos(bar_home_gemini, 12, 28);
 
     lbl_home_gem_val = lv_label_create(panel_mini);
     lv_label_set_text(lbl_home_gem_val, "90%");
     lv_obj_set_style_text_color(lbl_home_gem_val, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_home_gem_val, &lv_font_montserrat_14, 0);
-    lv_obj_set_pos(lbl_home_gem_val, 102, 22);
+    lv_obj_set_pos(lbl_home_gem_val, 106, 24);
 
     // Vách ngăn giữa
     lv_obj_t *sep = lv_obj_create(panel_mini);
-    lv_obj_set_size(sep, 1, 32);
-    lv_obj_set_pos(sep, 145, 8);
+    lv_obj_set_size(sep, 1, 34);
+    lv_obj_set_pos(sep, 152, 9);
     lv_obj_set_style_bg_color(sep, lv_color_hex(0x334155), 0);
     lv_obj_set_style_border_width(sep, 0, 0);
 
@@ -540,22 +553,22 @@ static void build_home_screen(void) {
     lv_label_set_text(lbl_mc, "CLAUDE");
     lv_obj_set_style_text_color(lbl_mc, lv_color_hex(0xF97316), 0);
     lv_obj_set_style_text_font(lbl_mc, &lv_font_montserrat_14, 0);
-    lv_obj_set_pos(lbl_mc, 155, 6);
+    lv_obj_set_pos(lbl_mc, 162, 6);
 
     bar_home_claude = lv_bar_create(panel_mini);
-    lv_obj_set_size(bar_home_claude, 85, 8);
+    lv_obj_set_size(bar_home_claude, 88, 8);
     lv_bar_set_range(bar_home_claude, 0, 100);
     lv_bar_set_value(bar_home_claude, 100, LV_ANIM_OFF);
     lv_obj_set_style_bg_color(bar_home_claude, lv_color_hex(0x1E293B), LV_PART_MAIN);
     lv_obj_set_style_bg_color(bar_home_claude, lv_color_hex(0xF97316), LV_PART_INDICATOR);
     lv_obj_set_style_radius(bar_home_claude, 3, 0);
-    lv_obj_set_pos(bar_home_claude, 155, 26);
+    lv_obj_set_pos(bar_home_claude, 162, 28);
 
     lbl_home_cld_val = lv_label_create(panel_mini);
     lv_label_set_text(lbl_home_cld_val, "100%");
     lv_obj_set_style_text_color(lbl_home_cld_val, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_home_cld_val, &lv_font_montserrat_14, 0);
-    lv_obj_set_pos(lbl_home_cld_val, 247, 22);
+    lv_obj_set_pos(lbl_home_cld_val, 256, 24);
 }
 
 // =========================================================================
@@ -567,10 +580,24 @@ esp_err_t display_ui_update_quota(const pc_quota_packet_t *quota) {
     if (lvgl_lock(100)) {
         char buf[64];
 
-        // 1. Đồng hồ (Cập nhật cho cả 2 màn hình)
+        // 1. Đồng hồ & Ngày tháng (Cập nhật cho cả 2 màn hình)
         if (quota->time_vn[0] != '\0') {
             if (lbl_clock) lv_label_set_text(lbl_clock, quota->time_vn);
-            if (lbl_home_big_clock) lv_label_set_text(lbl_home_big_clock, quota->time_vn);
+            if (lbl_home_big_clock) {
+                // Trích xuất định dạng HH:MM cho đồng hồ iPhone
+                char time_hm[8];
+                if (strlen(quota->time_vn) >= 5) {
+                    strncpy(time_hm, quota->time_vn, 5);
+                    time_hm[5] = '\0';
+                } else {
+                    strncpy(time_hm, quota->time_vn, sizeof(time_hm) - 1);
+                    time_hm[sizeof(time_hm) - 1] = '\0';
+                }
+                lv_label_set_text(lbl_home_big_clock, time_hm);
+            }
+        }
+        if (quota->date_vn[0] != '\0') {
+            if (lbl_home_calendar) lv_label_set_text(lbl_home_calendar, quota->date_vn);
         }
 
         // 2. Gemini Quota (Console Card + Home Mini)
@@ -591,6 +618,9 @@ esp_err_t display_ui_update_quota(const pc_quota_packet_t *quota) {
         if (bar_gemini_w) {
             lv_bar_set_value(bar_gemini_w, quota->gemini_weekly_percent, LV_ANIM_OFF);
         }
+        if (lbl_gem_sub && quota->gemini_reset[0] != '\0') {
+            lv_label_set_text(lbl_gem_sub, quota->gemini_reset);
+        }
         if (bar_home_gemini && lbl_home_gem_val) {
             lv_bar_set_value(bar_home_gemini, quota->antigrav_quota_percent, LV_ANIM_OFF);
             snprintf(buf, sizeof(buf), "%d%%", quota->antigrav_quota_percent);
@@ -605,6 +635,9 @@ esp_err_t display_ui_update_quota(const pc_quota_packet_t *quota) {
         }
         if (bar_claude_w) {
             lv_bar_set_value(bar_claude_w, quota->claude_weekly_percent, LV_ANIM_OFF);
+        }
+        if (lbl_cld_sub && quota->claude_reset[0] != '\0') {
+            lv_label_set_text(lbl_cld_sub, quota->claude_reset);
         }
         if (bar_home_claude && lbl_home_cld_val) {
             lv_bar_set_value(bar_home_claude, quota->claude_5h_percent, LV_ANIM_OFF);

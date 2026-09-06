@@ -87,6 +87,30 @@ esp_err_t pc_sync_process_packet(const uint8_t *raw_data, size_t len) {
         latest_quota.time_vn[sizeof(latest_quota.time_vn) - 1] = '\0';
     }
 
+    // Parse Vietnam date string (date / d)
+    cJSON *item_date = cJSON_GetObjectItem(root, "date");
+    if (!item_date) item_date = cJSON_GetObjectItem(root, "d");
+    if (item_date && cJSON_IsString(item_date)) {
+        strncpy(latest_quota.date_vn, item_date->valuestring, sizeof(latest_quota.date_vn) - 1);
+        latest_quota.date_vn[sizeof(latest_quota.date_vn) - 1] = '\0';
+    }
+
+    // Parse Gemini 5h reset countdown (g_reset / gr)
+    cJSON *item_gr = cJSON_GetObjectItem(root, "g_reset");
+    if (!item_gr) item_gr = cJSON_GetObjectItem(root, "gr");
+    if (item_gr && cJSON_IsString(item_gr)) {
+        strncpy(latest_quota.gemini_reset, item_gr->valuestring, sizeof(latest_quota.gemini_reset) - 1);
+        latest_quota.gemini_reset[sizeof(latest_quota.gemini_reset) - 1] = '\0';
+    }
+
+    // Parse Claude 5h reset countdown (c_reset / cr)
+    cJSON *item_cr = cJSON_GetObjectItem(root, "c_reset");
+    if (!item_cr) item_cr = cJSON_GetObjectItem(root, "cr");
+    if (item_cr && cJSON_IsString(item_cr)) {
+        strncpy(latest_quota.claude_reset, item_cr->valuestring, sizeof(latest_quota.claude_reset) - 1);
+        latest_quota.claude_reset[sizeof(latest_quota.claude_reset) - 1] = '\0';
+    }
+
     // Parse Gemini 5h quota % (primary quota)
     cJSON *item_quota = cJSON_GetObjectItem(root, "quota");
     if (!item_quota) item_quota = cJSON_GetObjectItem(root, "g_5h");

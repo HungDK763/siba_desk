@@ -37,6 +37,9 @@ typedef enum {
 typedef struct {
     char model_name[32];             // Model đang dùng (ví dụ: Gemini 3.8 Flash)
     char time_vn[16];                // Giờ Việt Nam realtime (ví dụ: 01:21:12)
+    char date_vn[32];                // Ngày tháng Việt Nam (ví dụ: Th 7 6 thg 9)
+    char gemini_reset[16];           // Đếm ngược reset Gemini 5h (ví dụ: 04:45)
+    char claude_reset[16];           // Đếm ngược reset Claude 5h (ví dụ: 04:59)
     uint8_t antigrav_quota_percent;  // Quota Gemini 5h còn lại (0 - 100%)
     uint8_t gemini_weekly_percent;   // Quota Gemini tuần (0 - 100%)
     uint8_t claude_5h_percent;       // Quota Claude 5h (0 - 100%)
