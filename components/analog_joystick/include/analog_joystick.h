@@ -18,7 +18,7 @@ typedef struct {
 } joystick_state_t;
 
 /**
- * @brief Khởi tạo Analog Joystick trên ADC1 (GPIO 1: VRx, GPIO 2: VRy, GPIO 3: SW)
+ * @brief Khởi tạo Analog Joystick trên ADC1 (GPIO 1: VRx, GPIO 2: VRy, GPIO 42: SW)
  */
 esp_err_t analog_joystick_init(void);
 

@@ -1,180 +1,162 @@
 # 📌 BẢN ĐỒ ĐỊNH NGHĨA CHÂN GPIO & HƯỚNG DẪN ĐẤU NỐI PHẦN CỨNG
-> **Dự án:** AI Developer Desk Console & Universal Gateway
-> **Chip vi điều khiển:** ESP32-S3 (8MB Flash, 8MB Octal PSRAM)
-> **Cập nhật:** Đã thay thế Rotary Encoder bằng **Analog Joystick 2 trục (VRx, VRy, SW)**.
+> **Dự án:** AI Developer Desk Console & Universal Gateway  
+> **Chip vi điều khiển:** ESP32-S3 (8MB Flash, 8MB Octal PSRAM)  
+> **Cập nhật mới:** Đã tối ưu hóa cụm chân **Màn hình TFT & Touch** thành **MỘT HÀNG THẲNG LIÊN TỤC 1:1** trên Header J1 theo đúng module phần cứng thực tế!
 
 ---
 
-## 1. BẢNG TỔNG HỢP TOÀN BỘ CHÂN GPIO
+## 1. ⚠️ CẢNH BÁO AN TOÀN NGUỒN ĐIỆN (BẮT BUỘC ĐỌC)
 
-| GPIO | Tên tín hiệu | Khối ngoại vi | Chiều I/O | Chức năng phần cứng | Mức điện áp | Ghi chú kỹ thuật |
-| :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **GPIO 0** | `BOOT_KEY` | Onboard Button | Input | GPIO | 3.3V | Nút BOOT có sẵn trên mạch (Kéo trở lên nội) |
-| **GPIO 1** | `JOY_VRX` | Analog Joystick | Input | **ADC1_CH0** | 0 - 3.3V | Đọc điện áp trục ngang X (0 - 4095) |
-| **GPIO 2** | `JOY_VRY` | Analog Joystick | Input | **ADC1_CH1** | 0 - 3.3V | Đọc điện áp trục dọc Y (0 - 4095) |
-| **GPIO 3** | `JOY_SW` | Analog Joystick | Input | GPIO | 3.3V | Nút nhấn cần gạt Thumbstick (Nhấn thẳng xuống) |
-| **GPIO 4** | `MACRO_KEY1` | Phím cơ Macro | Input | GPIO | 3.3V | Phím tắt 1 (Kéo trở Pull-up nội, bấm nối GND) |
-| **GPIO 5** | `MACRO_KEY2` | Phím cơ Macro | Input | GPIO | 3.3V | Phím tắt 2 (Kéo trở Pull-up nội, bấm nối GND) |
-| **GPIO 6** | `MACRO_KEY3` | Phím cơ Macro | Input | GPIO | 3.3V | Phím tắt 3 (Kéo trở Pull-up nội, bấm nối GND) |
-| **GPIO 7** | `MACRO_KEY4` | Phím cơ Macro | Input | GPIO | 3.3V | Phím tắt 4 (Kéo trở Pull-up nội, bấm nối GND) |
-| **GPIO 8** | `SPARE_1` | **DỰ PHÒNG 1** | - | GPIO / ADC1 | 3.3V | **Chân trống hoàn toàn** (Có thể dùng làm Buzzer/Còi/Pin) |
-| **GPIO 9** | `LCD_DC` | Màn hình TFT 2.8" | Output | GPIO | 3.3V | Chọn Data / Command cho màn hình LCD |
-| **GPIO 10**| `LCD_CS` | Màn hình TFT 2.8" | Output | SPI2_CS0 | 3.3V | Chip Select màn hình LCD (Tích cực mức Thấp) |
-| **GPIO 11**| `SPI_MOSI` | SPI Chung (Bus 2)| Output | SPI2_MOSI| 3.3V | Đường truyền dữ liệu chung cho LCD & Touch |
-| **GPIO 12**| `SPI_SCK` | SPI Chung (Bus 2)| Output | SPI2_CLK | 3.3V | Xung Clock chung cho LCD & Touch (Up to 40MHz)|
-| **GPIO 13**| `SPI_MISO` | SPI Chung (Bus 2)| Input | SPI2_MISO| 3.3V | Nhận dữ liệu cảm ứng Touch XPT2046 về ESP32 |
-| **GPIO 14**| `LCD_RST` | Màn hình TFT 2.8" | Output | GPIO | 3.3V | Reset phần cứng màn hình LCD |
-| **GPIO 15**| `PS2_DATA` | Cổng tay cầm PS2 | Input | GPIO | 3.3V | Nhận dữ liệu từ tay PS2 (**Bắt buộc trở kéo 10k lên 3.3V**)|
-| **GPIO 16**| `PS2_CMD` | Cổng tay cầm PS2 | Output | GPIO | 3.3V | Gửi lệnh từ ESP32 sang tay cầm PS2 |
-| **GPIO 17**| `PS2_ATT` | Cổng tay cầm PS2 | Output | GPIO | 3.3V | Attention / Chip Select tay cầm PS2 |
-| **GPIO 18**| `PS2_CLK` | Cổng tay cầm PS2 | Output | GPIO | 3.3V | Xung Clock đồng bộ với tay cầm PS2 |
-| **GPIO 19**| `USB_D-` | USB Native | Bi-dir | USB D- | 3.3V | Cổng USB OTG / Serial / JTAG nạp code & cấp nguồn |
-| **GPIO 20**| `USB_D+` | USB Native | Bi-dir | USB D+ | 3.3V | Cổng USB OTG / Serial / JTAG nạp code & cấp nguồn |
-| **GPIO 21**| `LCD_BL` | Màn hình TFT 2.8" | Output | LEDC/PWM | 3.3V | Điều khiển đèn nền màn hình (PWM chỉnh độ sáng) |
-| **GPIO 38**| `TOUCH_CS` | Cảm ứng Touch | Output | GPIO | 3.3V | Chip Select cảm ứng XPT2046 |
-| **GPIO 39**| `TOUCH_IRQ`| Cảm ứng Touch | Input | GPIO | 3.3V | Ngắt khi có ngón tay chạm màn hình |
-| **GPIO 40**| `RS485_TX` | Module RS485 | Output | UART1_TX | 3.3V | UART1 TX truyền dữ liệu sang MAX485 (chân DI) |
-| **GPIO 41**| `RS485_RX` | Module RS485 | Input | UART1_RX | 3.3V | UART1 RX nhận dữ liệu từ MAX485 (chân RO) |
-| **GPIO 42**| `RS485_DIR`| Module RS485 | Output | GPIO | 3.3V | Điều khiển hướng DE/RE (High: TX, Low: RX) |
-| **GPIO 45**| `SPARE_2` | **DỰ PHÒNG 2** | - | GPIO | 3.3V | **Chân trống hoàn toàn** (User GPIO) |
-| **GPIO 46**| `SPARE_3` | **DỰ PHÒNG 3** | Input | GPIO | 3.3V | **Chân trống hoàn toàn** (Input-only, Boot ROM log) |
-| **GPIO 47**| `SPARE_4` | **DỰ PHÒNG 4** | - | GPIO | 3.3V | **Chân trống hoàn toàn** (User GPIO) |
-| **GPIO 48**| `WS2812_LED`| Onboard RGB LED | Output | RMT | 3.3V | Đèn LED RGB địa chỉ WS2812 có sẵn trên kit |
+> [!CAUTION]
+> **ĐẢO CỰC NGUỒN 5V VÀ GND Ở ĐUÔI HEADER J1:**
+> * Trên ESP32-S3 Header J1: Chân 21 là **5V**, Chân 22 là **GND** *(5V trước, GND sau)*.
+> * Trên Module màn hình TFT: Chân 13 là **GND**, Chân 14 là **VCC** *(GND trước, VCC sau)*.
+> 
+> 👉 **Nếu cắm thẳng 1-1 không để ý sẽ bị chập nguồn / đảo cực gây cháy màn hình!**
+> * **Khi làm mạch in (PCB):** Bắt chéo 2 đường nguồn (hoặc đổi chỗ 2 lỗ cắm VCC và GND).
+> * **Khi cắm cáp bẹ:** Cắm thẳng 12 chân tín hiệu từ `GPIO 16` đến `GPIO 14`, riêng 2 sợi nguồn ở đuôi rút ra và cắm đúng: **VCC màn hình vào 5V**, **GND màn hình vào GND**.
 
 ---
 
-## 2. 📊 THỐNG KÊ TỔNG SỐ CHÂN & CHÂN CÒN DƯ
+## 2. 🔌 SƠ ĐỒ ĐẤU NỐI THẲNG HÀNG 1:1 CỤM MÀN HÌNH TFT & TOUCH
 
-* **Tổng chân GPIO khả dụng trên ESP32-S3 (bản 8MB PSRAM):** 28 chân
-* **Tổng chân ngoại vi đang sử dụng:** **22 chân**
-  * Màn hình TFT 2.8" & Touch: **8 chân** (`GPIO 9, 10, 11, 12, 13, 14, 21, 38, 39` - trong đó 11, 12, 13 dùng chung)
-  * Analog Joystick: **3 chân** (`GPIO 1, 2, 3`)
-  * 4 Phím cơ Macro: **4 chân** (`GPIO 4, 5, 6, 7`)
-  * Cổng tay cầm PS2: **4 chân** (`GPIO 15, 16, 17, 18`)
-  * Cổng chờ RS485: **3 chân** (`GPIO 40, 41, 42`)
-* **Chân tích hợp trên mạch (Onboard):** 2 chân (`GPIO 0` BOOT, `GPIO 48` WS2812 LED)
-* **🎉 SỐ CHÂN DỰ PHÒNG CÒN DƯ:** **4 CHÂN HOÀN TOÀN TRỐNG**
-  * `GPIO 8` *(Đặc biệt hỗ trợ cả ADC1_CH7)*
-  * `GPIO 45`
-  * `GPIO 46` *(Input only)*
-  * `GPIO 47`
-  *(Nếu sau này bạn dùng module RS485 loại tự động chuyển hướng Auto-Direction thì sẽ bỏ được chân GPIO 42, lúc đó sẽ **dư tới 5 chân GPIO**!)*
+Toàn bộ **14 chân** của Module TFT 2.8" SPI (kèm cảm ứng XPT2046) được map khớp nối tiếp vào **Header J1 (Cạnh trái ESP32-S3)**:
 
----
-
-## 3. ⚠️ CÁC CHÂN CẤM SỬ DỤNG TRÊN ESP32-S3
-
-Do phiên bản chip của bạn tích hợp sẵn **8MB Flash** và **8MB Octal PSRAM**, các chân sau được kết nối ngầm bên trong module và **TUYỆT ĐỐI KHÔNG ĐƯỢC HÀN/ĐẤU NỐI NGOẠI VI**:
-* **GPIO 26 đến GPIO 32**: Dành riêng cho giao tiếp Octal/Quad SPI Flash nội.
-* **GPIO 33 đến GPIO 37**: Dành riêng cho bộ nhớ mở rộng Octal PSRAM 8MB nội.
-* **GPIO 43, 44**: Đang làm UART0 Debug Console mặc định kết nối máy tính.
-
----
-
-## 4. HƯỚNG DẪN ĐẤU NỐI CHI TIẾT TỪNG NGOẠI VI
-
-### 4.1. Cần gạt Analog Joystick (Thumbstick 2 trục + Nút nhấn)
-Module cần gạt Joystick tiêu chuẩn (loại như tay cầm PS2 / Arduino KY-023) có 5 chân:
-
-```
-+-------------------+--------------------+-----------------------------------------------+
-| Chân trên Joystick| Chân trên ESP32-S3 | Ghi chú & Chức năng                           |
-+-------------------+--------------------+-----------------------------------------------+
-| GND               | GND                | Nối Mass chung                                |
-| +5V / VCC         | 3.3V               | BẮT BUỘC NỐI 3.3V để dải điện áp ADC là 0-3.3V|
-| VRx               | GPIO 1 (ADC1_CH0)  | Trục ngang X: Giữa = 1.65V (2048), Trái=0V, Phải=3.3V |
-| VRy               | GPIO 2 (ADC1_CH1)  | Trục dọc Y: Giữa = 1.65V (2048), Lên=0V, Xuống=3.3V   |
-| SW                | GPIO 3             | Nút nhấn cần gạt (Bật trở kéo nội, bấm nối GND)|
-+-------------------+--------------------+-----------------------------------------------+
-```
-> [!TIP]
-> `GPIO 1` và `GPIO 2` thuộc khối **ADC1** của ESP32-S3. Khối ADC1 hoạt động hoàn toàn độc lập, không bị ảnh hưởng hay xung đột khi bật Wi-Fi / Bluetooth!
-
----
-
-### 4.2. Màn hình 2.8" TFT SPI (ILI9341 / ST7789) & Cảm ứng (XPT2046)
-
-```
-+-------------------+--------------------+-----------------------------------------------+
-| Chân trên Module  | Chân trên ESP32-S3 | Ghi chú & Chức năng                           |
-+-------------------+--------------------+-----------------------------------------------+
-| VCC               | 3.3V hoặc 5V       | Khuyên dùng 5V nếu mạch có IC ổn áp 3.3V AMS  |
-| GND               | GND                | Nối chung Mass                                |
-| CS (LCD)          | GPIO 10            | Chip Select màn hình hiển thị                 |
-| RESET             | GPIO 14            | Reset màn hình                                |
-| DC / RS           | GPIO 9             | Data / Command select                         |
-| SDI (MOSI)        | GPIO 11            | Đường truyền dữ liệu SPI                      |
-| SCK (CLK)         | GPIO 12            | Đường xung nhịp SPI                           |
-| LED (BL)          | GPIO 21            | Đèn nền (hoặc nối thẳng 3.3V nếu sáng cố định)|
-| SDO (MISO)        | GPIO 13            | Đường nhận dữ liệu SPI                        |
-| T_CLK             | GPIO 12            | Nối chung với chân SCK của màn hình           |
-| T_CS              | GPIO 38            | Chip Select bộ cảm ứng XPT2046                |
-| T_DIN             | GPIO 11            | Nối chung với chân SDI/MOSI của màn hình      |
-| T_DO              | GPIO 13            | Nối chung với chân SDO/MISO của màn hình      |
-| T_IRQ             | GPIO 39            | Báo ngắt khi có chạm cảm ứng                  |
-+-------------------+--------------------+-----------------------------------------------+
+```text
+       HEADER J1 (ESP32-S3)                    MODULE TFT 2.8" SPI (XPT2046)
++-----------------------------------+     +-----------------------------------+
+| Vị trí Pin | Tên Chân ESP32-S3    |     | Tên Chân In Trên Lưng Module TFT  |
++------------+----------------------+     +-----------------------------------+
+| J1-9       | GPIO 16 (Touch IRQ)  | <-> | 1.  IRQ   (Ngắt cảm ứng)          |
+| J1-10      | GPIO 17 (Touch DO)   | <-> | 2.  DO    (T_DO / MISO Touch)     |
+| J1-11      | GPIO 18 (Touch DIN)  | <-> | 3.  DIN   (T_DIN / MOSI Touch)    |
+| J1-12      | GPIO 8  (Touch CS)   | <-> | 4.  CS    (T_CS Touch Select)     |
+| J1-13      | GPIO 3  (Touch CLK)  | <-> | 5.  CLK   (T_CLK Touch Clock)     |
+| J1-14      | GPIO 46 (LCD MISO)   | <-> | 6.  MISO  (SDO LCD / Read data)   |
+| J1-15      | GPIO 9  (LCD BL/LED) | <-> | 7.  LED   (Đèn nền LCD PWM)       |
+| J1-16      | GPIO 10 (LCD SCK)    | <-> | 8.  SCK   (Xung nhịp SPI LCD)     |
+| J1-17      | GPIO 11 (LCD MOSI)   | <-> | 9.  MOSI  (Dữ liệu SPI LCD)       |
+| J1-18      | GPIO 12 (LCD DC)     | <-> | 10. DC    (Lệnh/Dữ liệu LCD)      |
+| J1-19      | GPIO 13 (LCD RST)    | <-> | 11. RESET (Reset phần cứng LCD)   |
+| J1-20      | GPIO 14 (LCD CS)     | <-> | 12. CS    (Chip Select LCD)       |
+| J1-21      | 5V (Power)           | <X> | 13. GND   (Mass chung) [ĐẢO CHÉO] |
+| J1-22      | GND (Ground)         | <X> | 14. VCC   (Nguồn 5V)   [ĐẢO CHÉO] |
++------------+----------------------+     +-----------------------------------+
 ```
 
 ---
 
-### 4.3. Cụm 4 Phím cơ Macro (Tactile / Mechanical Switches)
-* **Chân 1 của 4 phím**: Nối chung với nhau rồi nối vào **GND**.
+## 3. 📊 BẢNG TỔNG HỢP TOÀN BỘ CHÂN GPIO HỆ THỐNG
+
+### Header J1 (Cạnh Trái):
+| Vị trí Pin | GPIO | Tên tín hiệu | Khối ngoại vi | Chiều I/O | Chức năng kỹ thuật |
+| :---: | :---: | :---: | :---: | :---: | :--- |
+| **J1-1** | `3V3` | 3.3V Power | Nguồn | Output | Nguồn 3.3V cấp cho cảm biến / phím |
+| **J1-2** | `3V3` | 3.3V Power | Nguồn | Output | Nguồn 3.3V dự phòng |
+| **J1-3** | `EN` | Reset Pin | Hệ thống | Input | Nút Reset vi điều khiển |
+| **J1-4** | **GPIO 4** | `MACRO_KEY1` | Phím cơ Macro | Input | Phím tắt 1 (Pullup nội, bấm nối GND) |
+| **J1-5** | **GPIO 5** | `MACRO_KEY2` | Phím cơ Macro | Input | Phím tắt 2 (Pullup nội, bấm nối GND) |
+| **J1-6** | **GPIO 6** | `MACRO_KEY3` | Phím cơ Macro | Input | Phím tắt 3 (Pullup nội, bấm nối GND) |
+| **J1-7** | **GPIO 7** | `MACRO_KEY4` | Phím cơ Macro | Input | Phím tắt 4 (Pullup nội, bấm nối GND) |
+| **J1-8** | **GPIO 15**| `SPARE_1` | **DỰ PHÒNG 1** | - | **Chân trống hoàn toàn** (Còi/Buzzer/LED) |
+| **J1-9** | **GPIO 16**| `TOUCH_IRQ` | Cảm ứng Touch | Input | Ngắt khi có ngón tay chạm màn hình |
+| **J1-10**| **GPIO 17**| `TOUCH_DO` | Cảm ứng Touch | Input | Đọc tọa độ chạm XPT2046 về ESP32 |
+| **J1-11**| **GPIO 18**| `TOUCH_DIN` | Cảm ứng Touch | Output | Gửi lệnh đọc kênh X/Y sang XPT2046 |
+| **J1-12**| **GPIO 8** | `TOUCH_CS` | Cảm ứng Touch | Output | Chip Select bộ cảm ứng XPT2046 |
+| **J1-13**| **GPIO 3** | `TOUCH_CLK` | Cảm ứng Touch | Output | Xung nhịp SPI cho cảm ứng |
+| **J1-14**| **GPIO 46**| `LCD_MISO` | Màn hình TFT | Input | Đọc dữ liệu / ID từ ILI9341 |
+| **J1-15**| **GPIO 9** | `LCD_BL` | Màn hình TFT | Output | LEDC PWM điều khiển độ sáng màn hình |
+| **J1-16**| **GPIO 10**| `SPI_CLK` | Màn hình TFT | Output | SPI Master Clock (40MHz) |
+| **J1-17**| **GPIO 11**| `SPI_MOSI` | Màn hình TFT | Output | SPI Master Data Out |
+| **J1-18**| **GPIO 12**| `LCD_DC` | Màn hình TFT | Output | Data / Command Select |
+| **J1-19**| **GPIO 13**| `LCD_RST` | Màn hình TFT | Output | Reset phần cứng ILI9341 |
+| **J1-20**| **GPIO 14**| `LCD_CS` | Màn hình TFT | Output | Chip Select màn hình hiển thị |
+| **J1-21**| `5V` | 5V Power | Nguồn | Output | Nguồn 5V cấp cho VCC màn hình |
+| **J1-22**| `GND` | Ground | Nguồn | - | Nối Mass chung hệ thống |
+
+---
+
+### Header J3 (Cạnh Phải):
+| Vị trí Pin | GPIO | Tên tín hiệu | Khối ngoại vi | Chiều I/O | Chức năng kỹ thuật |
+| :---: | :---: | :---: | :---: | :---: | :--- |
+| **J3-1** | `3V3` | 3.3V Power | Nguồn | Output | Nguồn 3.3V cấp cho Joystick & PS2 |
+| **J3-2** | `5V` | 5V Power | Nguồn | Output | Nguồn 5V USB |
+| **J3-3** | `GND` | Ground | Nguồn | - | Mass chung |
+| **J3-4** | **GPIO 1** | `JOY_VRX` | Analog Joystick | Input | **ADC1_CH0** (Đọc trục ngang X: 0-3.3V) |
+| **J3-5** | **GPIO 2** | `JOY_VRY` | Analog Joystick | Input | **ADC1_CH1** (Đọc trục dọc Y: 0-3.3V) |
+| **J3-6** | **GPIO 42**| `JOY_SW` | Analog Joystick | Input | Nút nhấn cần gạt Thumbstick (Pullup) |
+| **J3-7** | **GPIO 41**| `PS2_DATA` | Cổng tay cầm PS2 | Input | Nhận dữ liệu tay PS2 (**Trở kéo 10k lên 3.3V**)|
+| **J3-8** | **GPIO 40**| `PS2_CMD` | Cổng tay cầm PS2 | Output | Gửi lệnh sang tay cầm PS2 |
+| **J3-9** | **GPIO 39**| `PS2_ATT` | Cổng tay cầm PS2 | Output | Chip Select tay cầm PS2 |
+| **J3-10**| **GPIO 38**| `PS2_CLK` | Cổng tay cầm PS2 | Output | Xung đồng bộ với tay cầm PS2 |
+| **J3-15**| **GPIO 45**| `RS485_DIR`| Module RS485 | Output | Điều khiển hướng DE/RE (High: TX, Low: RX) |
+| **J3-16**| **GPIO 48**| `WS2812_LED`| Onboard RGB LED | Output | LED RGB địa chỉ có sẵn trên kit ESP32-S3 |
+| **J3-17**| **GPIO 47**| `RS485_TX` | Module RS485 | Output | UART1 TX truyền dữ liệu sang MAX485 |
+| **J3-18**| **GPIO 21**| `RS485_RX` | Module RS485 | Input | UART1 RX nhận dữ liệu từ MAX485 |
+
+---
+
+## 4. ⚠️ CÁC CHÂN CẤM SỬ DỤNG TRÊN ESP32-S3 (OCTAL PSRAM)
+
+Kit ESP32-S3 sử dụng chip tích hợp sẵn **8MB Flash** và **8MB Octal PSRAM**, các chân sau đấu ngầm bên trong chip, **TUYỆT ĐỐI KHÔNG ĐƯỢC HÀN / KẾT NỐI**:
+* **GPIO 26 đến GPIO 32**: Dành riêng cho Octal SPI Flash nội.
+* **GPIO 33 đến GPIO 37**: Dành riêng cho Octal PSRAM 8MB nội.
+* **GPIO 43, 44**: Đang làm cổng nạp UART0 Debug Console mặc định.
+* **GPIO 19, 20**: Cổng USB D- và D+ giao tiếp USB native máy tính.
+
+---
+
+## 5. HƯỚNG DẪN ĐẤU NỐI CHI TIẾT TỪNG NGOẠI VI
+
+### 5.1. Cần gạt Analog Joystick (Thumbstick 2 trục + Nút nhấn)
+Nằm trọn vẹn ở góc trên bên phải (**Header J3**):
+```text
++--------------------+--------------------+-----------------------------------------------+
+| Chân trên Joystick | Chân trên ESP32-S3 | Ghi chú & Chức năng                           |
++--------------------+--------------------+-----------------------------------------------+
+| GND                | GND (J3-3)         | Nối Mass chung                                |
+| +5V / VCC          | 3.3V (J3-1)        | BẮT BUỘC NỐI 3.3V để dải điện áp ADC là 0-3.3V|
+| VRx                | GPIO 1 (J3-4)      | Trục ngang X: Giữa = 1.65V, Trái=0V, Phải=3.3V|
+| VRy                | GPIO 2 (J3-5)      | Trục dọc Y: Giữa = 1.65V, Lên=0V, Xuống=3.3V  |
+| SW                 | GPIO 42 (J3-6)     | Nút nhấn cần gạt (Bật trở kéo nội, bấm nối GND)|
++--------------------+--------------------+-----------------------------------------------+
+```
+
+### 5.2. Cụm 4 Phím cơ Macro
+Nằm ở 4 chân đầu của **Header J1**:
+* **Chân 1 của 4 phím**: Nối chung với nhau về **GND**.
 * **Chân 2 của từng phím**:
-  * Phím 1 -> **GPIO 4**
-  * Phím 2 -> **GPIO 5**
-  * Phím 3 -> **GPIO 6**
-  * Phím 4 -> **GPIO 7**
-*(Bên trong ESP32 sẽ bật trở kéo lên nội `GPIO_PULLUP_ENABLE`, khi nhấn phím sẽ kéo chân về mức 0V).*
+  * Phím 1 -> **GPIO 4** (J1-4)
+  * Phím 2 -> **GPIO 5** (J1-5)
+  * Phím 3 -> **GPIO 6** (J1-6)
+  * Phím 4 -> **GPIO 7** (J1-7)
 
----
-
-### 4.4. Cổng cắm tay cầm PS2 (PlayStation 2 Controller)
-
-```
-Sơ đồ nhìn trực diện vào đầu cắm tay cầm PS2:
-    -----------------------------------
-PIN: | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
-     -----------------------------------
-     (1: DATA, 2: COMMAND, 4: GND, 5: VCC, 6: ATT, 7: CLOCK)
-```
-
-```
+### 5.3. Cổng cắm tay cầm PS2 (PlayStation 2 Controller)
+Nằm ở cụm 4 chân liên tiếp trên **Header J3**:
+```text
 +-------------------+--------------------+-----------------------------------------------+
 | Chân đầu cắm PS2  | Chân trên ESP32-S3 | Ghi chú kỹ thuật                              |
 +-------------------+--------------------+-----------------------------------------------+
-| Pin 1: DATA       | GPIO 15            | BẮT BUỘC: Hàn 1 trở 10k kéo từ chân này lên 3.3V|
-| Pin 2: COMMAND    | GPIO 16            | Tín hiệu lệnh gửi sang tay                    |
-| Pin 3: VIBRATION  | Nối nguồn 7-9V     | (Tùy chọn) Chỉ cần nếu muốn bật motor rung    |
-| Pin 4: GND        | GND                | Nối Mass chung                                |
-| Pin 5: VCC        | 3.3V               | Nguồn cấp cho chip xử lý tay cầm (3.3V)       |
-| Pin 6: ATTENTION  | GPIO 17            | Chân chọn thiết bị (CS)                       |
-| Pin 7: CLOCK      | GPIO 18            | Xung đồng bộ truyền tin                       |
-| Pin 8: N/C        | Để trống           | Không sử dụng                                 |
-| Pin 9: ACK        | Để trống           | Không cần dùng                                |
+| Pin 1: DATA       | GPIO 41 (J3-7)     | BẮT BUỘC: Trở 10k kéo từ chân này lên 3.3V   |
+| Pin 2: COMMAND    | GPIO 40 (J3-8)     | Tín hiệu lệnh gửi sang tay                    |
+| Pin 4: GND        | GND (J3-3)         | Nối Mass chung                                |
+| Pin 5: VCC        | 3.3V (J3-1)        | Nguồn cấp cho chip xử lý tay cầm (3.3V)       |
+| Pin 6: ATTENTION  | GPIO 39 (J3-9)     | Chân chọn thiết bị (CS)                       |
+| Pin 7: CLOCK      | GPIO 38 (J3-10)    | Xung đồng bộ truyền tin                       |
 +-------------------+--------------------+-----------------------------------------------+
 ```
 
----
-
-### 4.5. Module giao tiếp RS485 (MAX485 / SP3485)
-
-```
+### 5.4. Cổng mở rộng RS485 (MAX485 / SP3485)
+Nằm ở góc dưới của **Header J3**:
+```text
 +-------------------+--------------------+-----------------------------------------------+
 | Chân trên MAX485  | Chân trên ESP32-S3 | Ghi chú                                       |
 +-------------------+--------------------+-----------------------------------------------+
-| VCC               | 3.3V (hoặc 5V)     | Nếu dùng module SP3485 dùng 3.3V, MAX485 dùng 5V|
-| GND               | GND                | Nối Mass chung                                |
-| DI (Driver Input) | GPIO 40 (TX1)      | Dữ liệu truyền đi từ ESP32                    |
-| RO (Recv Output)  | GPIO 41 (RX1)      | Dữ liệu nhận về ESP32                         |
-| DE & RE (Nối chập)| GPIO 42            | Điều khiển hướng truyền (1: Phát, 0: Nhận)    |
-| A & B             | Ra giắc vặn ốc     | Cặp dây xoắn RS485 dẫn ra thiết bị ngoài      |
+| VCC               | 5V (hoặc 3.3V)     | Nguồn cấp                                     |
+| GND               | GND                | Mass chung                                    |
+| DI (Driver Input) | GPIO 47 (J3-17)    | Dữ liệu truyền đi từ ESP32                    |
+| RO (Recv Output)  | GPIO 21 (J3-18)    | Dữ liệu nhận về ESP32                         |
+| DE & RE (Nối chập)| GPIO 45 (J3-15)    | Điều khiển hướng truyền (1: Phát, 0: Nhận)    |
+| A & B             | Ra giắc vặn ốc     | Dây tín hiệu vi sai RS485                     |
 +-------------------+--------------------+-----------------------------------------------+
 ```
-
----
-
-## 5. BẢNG PHÂN CHIA NGUỒN CẤP (POWER DISTRIBUTION)
-
-* **Nguồn 5V USB Type-C:** Cấp trực tiếp cho chân VCC của Màn hình (nếu màn hình có IC 3.3V trên bo) và cấp cho module RS485.
-* **Nguồn 3.3V từ ESP32-S3:** Cấp cho Joystick (để đọc ADC chuẩn 0-3.3V), tay cầm PS2, và các chân kéo trở.
-* **Chân GND:** Tất cả các module phải được nối chung một đường GND duy nhất (Star Grounding) để chống nhiễu ADC và SPI.

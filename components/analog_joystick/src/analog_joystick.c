@@ -5,7 +5,7 @@
 static const char *TAG = "JOYSTICK";
 
 esp_err_t analog_joystick_init(void) {
-    ESP_LOGI(TAG, "Analog Joystick Component initialized on GPIO 1 (VRx), GPIO 2 (VRy), GPIO 3 (SW) - Placeholder ready");
+    ESP_LOGI(TAG, "Analog Joystick Component initialized on GPIO 1 (VRx), GPIO 2 (VRy), GPIO 42 (SW) - Placeholder ready");
     return ESP_OK;
 }
 

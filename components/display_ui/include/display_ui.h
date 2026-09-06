@@ -4,33 +4,26 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "esp_err.h"
+#include "pc_sync.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef struct {
-    uint8_t claude_quota_percent;
-    uint8_t antigrav_quota_percent;
-    uint8_t cpu_usage_percent;
-    uint8_t ram_usage_percent;
-    uint8_t reset_hours_left;
-} display_quota_data_t;
-
 /**
- * @brief Khởi tạo màn hình TFT 2.8" SPI và bộ điều khiển cảm ứng
+ * @brief Khởi tạo màn hình TFT 2.8" SPI (ILI9341) và engine đồ họa LVGL v8
  */
 esp_err_t display_ui_init(void);
 
 /**
- * @brief Cập nhật thông số Quota AI lên màn hình
+ * @brief Cập nhật thông số Quota AI và Telemetry lên màn hình LVGL
  */
-esp_err_t display_ui_update_quota(const display_quota_data_t *data);
+esp_err_t display_ui_update_quota(const pc_quota_packet_t *quota);
 
 /**
- * @brief Cập nhật hiển thị trạng thái nút bấm / analog của tay PS2
+ * @brief Điều khiển độ sáng đèn nền màn hình (0-100%)
  */
-esp_err_t display_ui_update_gamepad(uint16_t buttons, int16_t lx, int16_t ly, int16_t rx, int16_t ry);
+esp_err_t display_ui_set_backlight(uint8_t brightness_pct);
 
 #ifdef __cplusplus
 }

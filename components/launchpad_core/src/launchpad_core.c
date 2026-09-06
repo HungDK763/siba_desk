@@ -7,6 +7,7 @@
 #include "led_strip.h"
 #include "ble_hid.h"
 #include "pc_sync.h"
+#include "display_ui.h"
 #include "launchpad_core.h"
 
 static const char *TAG = "LP_CORE";
@@ -323,6 +324,9 @@ static void on_pc_quota_updated(const pc_quota_packet_t *quota) {
 
     ESP_LOGI(TAG, "%s", border);
 
+    // Cập nhật dữ liệu thời gian thực lên màn hình TFT 2.8" LVGL
+    display_ui_update_quota(quota);
+
     // Nếu Quota nguy cấp (<20%), nháy LED đỏ cảnh báo
     if (quota->alert_level == QUOTA_ALERT_CRITICAL && led_strip) {
         led_strip_set_pixel(led_strip, 0, 70, 0, 0); // Đỏ sáng cảnh báo
@@ -340,6 +344,9 @@ esp_err_t launchpad_core_init(void) {
 
     // 2. Đăng ký hàm nhận gói tin BLE thô từ ble_hid chuyển sang bộ bóc tách pc_sync
     ble_hid_register_pc_sync_cb(on_ble_raw_data_received);
+
+    // 3. Khởi tạo màn hình TFT 2.8" SPI và engine đồ họa LVGL v8
+    display_ui_init();
 
     xTaskCreate(launchpad_button_task, "lp_btn_task", 3072, NULL, 10, NULL);
     return ESP_OK;

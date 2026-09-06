@@ -130,11 +130,11 @@ def get_vietnam_time():
     return dt_vn.strftime("%H:%M:%S")
 
 def find_language_server():
-    """Tìm port và CSRF token của Antigravity (Chỉ quét khi chưa cache hoặc tiến trình cũ đã chết)."""
+    """Tìm port và CSRF token của Antigravity/Agy (Chỉ quét khi chưa cache hoặc tiến trình cũ đã chết)."""
     global g_cached_lsp
     
     # 1. Kiểm tra cache có còn sống không (Không cần quét toàn bộ hệ thống)
-    if g_cached_lsp["pid"] and os.path.exists(f"/proc/{g_cached_lsp['pid']}"):
+    if g_cached_lsp["pid"] and os.path.exists(f"/proc/{g_cached_lsp['pid']}") and g_cached_lsp["port"]:
         return g_cached_lsp["port"], g_cached_lsp["csrf"]
 
     if not psutil:
@@ -142,28 +142,31 @@ def find_language_server():
 
     try:
         for p in psutil.process_iter(['pid', 'name', 'cmdline']):
+            name = (p.info.get('name') or '').lower()
             cmdline = p.info.get('cmdline') or []
-            cmd_str = ' '.join(cmdline)
-            if 'language_server' in cmd_str and '--csrf_token' in cmd_str:
-                csrf_match = re.search(r'--csrf_token\s+([a-f0-9\-]+)', cmd_str)
-                if not csrf_match:
-                    continue
-                csrf_token = csrf_match.group(1)
+            cmd_str = ' '.join(cmdline).lower()
+            
+            # Khớp cả agy (Antigravity CLI) lẫn language_server (Antigravity IDE / VS Code)
+            if 'agy' in name or 'language_server' in cmd_str or 'antigravity' in cmd_str:
+                csrf_token = None
+                csrf_match = re.search(r'--csrf_token\s+([a-f0-9\-]+)', ' '.join(cmdline))
+                if csrf_match:
+                    csrf_token = csrf_match.group(1)
                 
                 ports = []
-                for conn in p.connections(kind='inet'):
-                    if conn.status == psutil.CONN_LISTEN and conn.laddr.ip == '127.0.0.1':
-                        ports.append(conn.laddr.port)
+                try:
+                    for conn in p.connections(kind='inet'):
+                        if conn.status == psutil.CONN_LISTEN and conn.laddr.ip == '127.0.0.1':
+                            ports.append(conn.laddr.port)
+                except Exception:
+                    continue
                 
                 for port in ports:
-                    # Test nhẹ 1 request
                     url = f'http://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary'
-                    req = urllib.request.Request(
-                        url,
-                        data=b'{}',
-                        headers={'Content-Type': 'application/json', 'x-codeium-csrf-token': csrf_token},
-                        method='POST'
-                    )
+                    headers = {'Content-Type': 'application/json'}
+                    if csrf_token:
+                        headers['x-codeium-csrf-token'] = csrf_token
+                    req = urllib.request.Request(url, data=b'{}', headers=headers, method='POST')
                     try:
                         with urllib.request.urlopen(req, timeout=1.0) as resp:
                             if resp.status == 200:
@@ -182,14 +185,17 @@ def fetch_antigravity_live_quota():
     """Truy vấn trực tiếp hạn mức bằng kết nối cache tốc độ cao."""
     global g_cached_lsp
     port, csrf_token = find_language_server()
-    if not port or not csrf_token:
+    if not port:
         return None
 
     url = f'http://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary'
+    headers = {'Content-Type': 'application/json'}
+    if csrf_token:
+        headers['x-codeium-csrf-token'] = csrf_token
     req = urllib.request.Request(
         url,
         data=b'{}',
-        headers={'Content-Type': 'application/json', 'x-codeium-csrf-token': csrf_token},
+        headers=headers,
         method='POST'
     )
     try:

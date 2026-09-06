@@ -1,53 +1,164 @@
-# 📋 BÁO CÁO KIỂM THỬ ĐỒNG BỘ QUOTA ANTIGRAVITY QUA BLE
+I (26402362) LP_CORE: +--------------------------------------------------------------------+
+I (26402362) LP_CORE: | Gio Viet Nam:       02:03:53 (UTC+7)                               |
+I (26402362) LP_CORE: | AI Model:           Gemini 3.8 Flash (High)                        |
+I (26402362) LP_CORE: | [GEMINI] 5h Limit:   29% [CẢNH BÁO 🟡]  | Weekly:  86%             |
+I (26402362) LP_CORE: | [CLAUDE] 5h Limit:  100% [AN TOÀN  🟢]  | Weekly: 100%             |
+I (26402362) LP_CORE: | Số Prompts hôm nay: 65                                             |
+I (26402372) LP_CORE: | Host PC Telemetry:  CPU: 63%            | RAM: 62%                 |
+I (26402372) LP_CORE: | Trạng thái Module:  PARSED_SUCCESS                                 |
+I (26402372) LP_CORE: +--------------------------------------------------------------------+
+I (26412582) BLE_HID: BLE Received 142 bytes on PC Sync Characteristic
+I (26412582) LP_CORE: +--------------------------------------------------------------------+
+I (26412582) LP_CORE: | [PC_SYNC] CAP NHAT DU LIEU QUOTA ANTIGRAVITY QUA BLE               |
+I (26412582) LP_CORE: +--------------------------------------------------------------------+
+I (26412582) LP_CORE: | Gio Viet Nam:       02:04:03 (UTC+7)                               |
+I (26412582) LP_CORE: | AI Model:           Gemini 3.8 Flash (High)                        |
+I (26412582) LP_CORE: | [GEMINI] 5h Limit:   29% [CẢNH BÁO 🟡]  | Weekly:  86%             |
+I (26412582) LP_CORE: | [CLAUDE] 5h Limit:  100% [AN TOÀN  🟢]  | Weekly: 100%             |
+I (26412582) LP_CORE: | Số Prompts hôm nay: 65                                             |
+I (26412582) LP_CORE: | Host PC Telemetry:  CPU: 65%            | RAM: 61%                 |
+I (26412582) LP_CORE: | Trạng thái Module:  PARSED_SUCCESS                                 |
+I (26412582) LP_CORE: +--------------------------------------------------------------------+
+I (26422702) BLE_HID: BLE Received 142 bytes on PC Sync Characteristic
+I (26422702) LP_CORE: +--------------------------------------------------------------------+
+I (26422702) LP_CORE: | [PC_SYNC] CAP NHAT DU LIEU QUOTA ANTIGRAVITY QUA BLE               |
+I (26422702) LP_CORE: +--------------------------------------------------------------------+
+I (26422702) LP_CORE: | Gio Viet Nam:       02:04:13 (UTC+7)                               |
+I (26422702) LP_CORE: | AI Model:           Gemini 3.8 Flash (High)                        |
+I (26422702) LP_CORE: | [GEMINI] 5h Limit:   29% [CẢNH BÁO 🟡]  | Weekly:  86%             |
+I (26422702) LP_CORE: | [CLAUDE] 5h Limit:  100% [AN TOÀN  🟢]  | Weekly: 100%             |
+I (26422702) LP_CORE: | Số Prompts hôm nay: 65                                             |
+I (26422712) LP_CORE: | Host PC Telemetry:  CPU: 60%            | RAM: 61%                 |
+I (26422712) LP_CORE: | Trạng thái Module:  PARSED_SUCCESS                                 |
+I (26422712) LP_CORE: +--------------------------------------------------------------------+
+I (26430802) BLE_HID: BLE Received 141 bytes on PC Sync Characteristic
+I (26430802) LP_CORE: +--------------------------------------------------------------------+
+I (26430802) LP_CORE: | [PC_SYNC] CAP NHAT DU LIEU QUOTA ANTIGRAVITY QUA BLE               |
+I (26430802) LP_CORE: +--------------------------------------------------------------------+
+I (26430802) LP_CORE: | Gio Viet Nam:       09:04:07 (UTC+7)                               |
+I (26430802) LP_CORE: | AI Model:           Gemini 3.8 Flash (High)                        |
+I (26430802) LP_CORE: | [GEMINI] 5h Limit:   29% [CẢNH BÁO 🟡]  | Weekly:  86%             |
+I (26430802) LP_CORE: | [CLAUDE] 5h Limit:  100% [AN TOÀN  🟢]  | Weekly: 100%             |
+I (26430812) LP_CORE: | Số Prompts hôm nay: 65                                             |
+I (26430812) LP_CORE: | Host PC Telemetry:  CPU:  9%            | RAM: 61%                 |
+I (26430812) LP_CORE: | Trạng thái Module:  PARSED_SUCCESS                                 |
+I (26430812) LP_CORE: +--------------------------------------------------------------------+
+I (26432782) BLE_HID: BLE Received 142 bytes on PC Sync Characteristic
+I (26432782) LP_CORE: +--------------------------------------------------------------------+
+I (26432782) LP_CORE: | [PC_SYNC] CAP NHAT DU LIEU QUOTA ANTIGRAVITY QUA BLE               |
+I (26432782) LP_CORE: +--------------------------------------------------------------------+
+I (26432782) LP_CORE: | Gio Viet Nam:       02:04:23 (UTC+7)                               |
+I (26432782) LP_CORE: | AI Model:           Gemini 3.8 Flash (High)                        |
+I (26432792) LP_CORE: | [GEMINI] 5h Limit:   29% [CẢNH BÁO 🟡]  | Weekly:  86%             |
+I (26432792) LP_CORE: | [CLAUDE] 5h Limit:  100% [AN TOÀN  🟢]  | Weekly: 100%             |
+I (26432792) LP_CORE: | Số Prompts hôm nay: 65                                             |
+I (26432792) LP_CORE: | Host PC Telemetry:  CPU: 56%            | RAM: 61%                 |
+I (26432792) LP_CORE: | Trạng thái Module:  PARSED_SUCCESS                                 |
+I (26432792) LP_CORE: +--------------------------------------------------------------------+
+I (26442952) BLE_HID: BLE Received 142 bytes on PC Sync Characteristic
+I (26442952) LP_CORE: +--------------------------------------------------------------------+
+I (26442952) LP_CORE: | [PC_SYNC] CAP NHAT DU LIEU QUOTA ANTIGRAVITY QUA BLE               |
+I (26442952) LP_CORE: +--------------------------------------------------------------------+
+I (26442952) LP_CORE: | Gio Viet Nam:       02:04:34 (UTC+7)                               |
+I (26442952) LP_CORE: | AI Model:           Gemini 3.8 Flash (High)                        |
+I (26442952) LP_CORE: | [GEMINI] 5h Limit:   29% [CẢNH BÁO 🟡]  | Weekly:  86%             |
+I (26442952) LP_CORE: | [CLAUDE] 5h Limit:  100% [AN TOÀN  🟢]  | Weekly: 100%             |
+I (26442962) LP_CORE: | Số Prompts hôm nay: 65                                             |
+I (26442962) LP_CORE: | Host PC Telemetry:  CPU: 57%            | RAM: 61%                 |
+I (26442962) LP_CORE: | Trạng thái Module:  PARSED_SUCCESS                                 |
+I (26442962) LP_CORE: +--------------------------------------------------------------------+
 
-> **Tài liệu kiểm định thực tế tính năng PC Sync - ESP32 LaunchPad**  
-> **Thời gian thực hiện:** 06/09/2026 - 08:16:00 (GMT+7)  
-> **Trạng thái:** ✅ **HOÀN THÀNH & CĂN CHỈNH CHUẨN XÁC 100%**
 
----
 
-## 1. Dữ liệu Hạn mức Thực tế từ Antigravity (Ground Truth)
 
-Dữ liệu đọc trực tiếp từ Local Language Server của Antigravity CLI / IDE:
-- **Tài khoản:** `tolahungstm@gmail.com`
-- **Cơ chế:** Quota chia thành 2 nhóm mô hình (Gemini Models & Claude/GPT Models) với chu kỳ 5 giờ và chu kỳ tuần.
 
-| Nhóm Mô hình (Group) | Chu kỳ (Window) | Hạn mức còn lại (%) | Thời gian làm mới | Trạng thái hiển thị |
-| :--- | :---: | :---: | :---: | :---: |
-| **GEMINI MODELS** | **5-Hour Limit** | **`45%`** | Làm mới sau ~1h40m | `[CẢNH BÁO 🟡]` |
-| | **Weekly Limit** | **`88%`** | Làm mới sau 6 ngày 7h | `88%` |
-| **CLAUDE & GPT MODELS** | **5-Hour Limit** | **`100%`** | Làm mới sau ~2h | `[AN TOÀN  🟢]` |
-| | **Weekly Limit** | **`100%`** | Làm mới sau 6 ngày 20h | `100%` |
 
----
+▄▀▀▄        Antigravity CLI 1.1.27
 
-## 2. Log Chuẩn Hóa Trên ESP32 UART Monitor (/dev/ttyACM0)
+    ▀▀▀▀▀▀       tolahungstm@gmail.com (Google AI Pro)
 
-> Đã loại bỏ hoàn toàn các icon trang trí (`📊`, `📥`, `•`), chỉ giữ lại nút chấm màu trạng thái (`🟢`, `🟡`, `🔴`), đồng thời toàn bộ các viền dọc `|` (cả viền ngoài và cột ngăn cách giữa) đều được căn chỉnh thẳng hàng tuyệt đối.
+    ▀▀▀▀▀▀▀▀      Gemini 3.8 Flash (High)
 
-```text
-I (24259) BLE_HID: BLE Received 142 bytes on PC Sync Characteristic
-I (24259) LP_CORE: +--------------------------------------------------------------------+
-I (24259) LP_CORE: | [PC_SYNC] CAP NHAT DU LIEU QUOTA ANTIGRAVITY QUA BLE               |
-I (24259) LP_CORE: +--------------------------------------------------------------------+
-I (24269) LP_CORE: | Gio Viet Nam:       01:23:07 (UTC+7)                               |
-I (24269) LP_CORE: | AI Model:           Gemini 3.8 Flash (High)                        |
-I (24269) LP_CORE: | [GEMINI] 5h Limit:   42% [CẢNH BÁO 🟡]  | Weekly:  88%             |
-I (24269) LP_CORE: | [CLAUDE] 5h Limit:  100% [AN TOÀN  🟢]  | Weekly: 100%             |
-I (24269) LP_CORE: | Số Prompts hôm nay: 49                                             |
-I (24269) LP_CORE: | Host PC Telemetry:  CPU: 33%            | RAM: 58%                 |
-I (24269) LP_CORE: | Trạng thái Module:  PARSED_SUCCESS                                 |
-I (24269) LP_CORE: +--------------------------------------------------------------------+
-```
+   ▄▀▀    ▀▀▄     ~
 
----
+  ▄▀▀      ▀▀▄
 
-## 3. Quy Chuẩn Kỹ Thuật Đã Căn Chỉnh
 
-1. **Loại bỏ Icon thừa:** Không còn icon đầu mục hay biểu tượng đồ họa gây lệch dòng trên terminal.
-2. **Nút trạng thái:** Giữ lại các nút chấm tròn tiêu chuẩn:
-   - `AN TOÀN  🟢` (Xanh khi Quota >= 50%)
-   - `CẢNH BÁO 🟡` (Vàng khi Quota từ 20% đến 49%)
-   - `NGUY CẤP 🔴` (Đỏ khi Quota < 20%)
-3. **Căn lề trực quan (Visual Column Width Padding):** Sử dụng thuật toán đếm bề rộng hiển thị thực tế (bù trừ cho ký tự Unicode tiếng Việt và emoji 2-cột), đảm bảo chiều rộng khung luôn cố định chính xác 70 cột trên mọi terminal.
-4. **Viền phân cách `|`:** Thẳng tắp cả 2 bên viền mép ngoài lẫn cột phân cách ở giữa.
+
+────────────────────────────────────────────────────────────────────────────────────────────
+
+>
+
+────────────────────────────────────────────────────────────────────────────────────────────
+
+└ Models & Quota
+
+
+
+  Account: tolahungstm@gmail.com
+
+
+
+GEMINI MODELS
+
+  Models within this group: Gemini Flash, Gemini Pro
+
+
+
+  Weekly Limit Remaining
+
+    [███████████████████████████████████████████░░░░░░░] 85.64%
+
+    86% remaining · Refreshes in 144h 18m
+
+
+
+  Five Hour Limit Remaining
+
+    [██████████████████████████████████████████████████] 100.00%
+
+    Quota available
+
+
+
+
+
+CLAUDE AND GPT MODELS
+
+  Models within this group: Claude Opus, Claude Sonnet, GPT-OSS
+
+
+
+  Weekly Limit Remaining
+
+    [██████████████████████████████████████████████████] 99.92%
+
+    100% remaining · Refreshes in 156h 58m
+
+
+
+  Five Hour Limit Remaining
+
+    [██████████████████████████████████████████████████] 100.00%
+
+    Quota available
+
+
+
+
+
+  │Within each group, models share a weekly limit and a 5-hour limit. Quota is
+
+  │consumed proportionally to the cost of the tokens. Thus, limits will last
+
+  │longer with shorter tasks or using more cost-effective models. The 5-hour
+
+  │limit smooths out aggregate demand to fairly distribute global capacity
+
+  │across all users, while your weekly limit is tied directly to your individual
+
+  │tier.
+
+
+
+  ↑/↓ Scroll · pgup/pgdown Page · ctrl+end Bottom · ctrl+home Top · esc Close
