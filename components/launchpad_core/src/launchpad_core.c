@@ -282,7 +282,9 @@ static void print_box_line(const char *content) {
 }
 
 static void on_pc_quota_updated(const pc_quota_packet_t *quota) {
-    // Temporarily muted during LCD diagnostic to keep serial output 100% clean
+    ESP_LOGI(TAG, "📊 Quota Sync: Gemini=%d%% | Claude=%d%% | CPU=%d%% | Prompts=%lu | Time=%s",
+             quota->antigrav_quota_percent, quota->claude_5h_percent, quota->cpu_percent,
+             (unsigned long)quota->prompt_count, quota->time_vn);
     display_ui_update_quota(quota);
 
     // Nếu Quota nguy cấp (<20%), nháy LED đỏ cảnh báo
