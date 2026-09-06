@@ -1,6 +1,6 @@
 # 📡 TÀI LIỆU KỸ THUẬT: ANTIGRAVITY QUOTA & PC TELEMETRY SYNC
 
-> **Tài liệu đặc tả kiến trúc, công nghệ và luồng xử lý (Data Flow)**  
+> **Tài liệu đặc tả kiến trúc, công nghệ và luồng xử lý (Data Flow)**
 > **Mục tiêu:** Đồng bộ thời gian thực hạn mức Antigravity AI (Gemini & Claude/GPT) và tài nguyên máy tính (CPU, RAM) từ PC sang bàn điều khiển ESP32-S3 qua kết nối không dây Bluetooth Low Energy (BLE).
 
 ---
@@ -37,27 +37,31 @@ sequenceDiagram
 ## 2. Chi Tiết Công Nghệ Sử Dụng (Technology Stack)
 
 ### 2.1. Phía Máy Tính (Host PC - Python 3)
-| Hạng mục | Công nghệ / Thư viện | Đặc tả kỹ thuật & Giải pháp |
-| :--- | :--- | :--- |
-| **Thu thập Quota** | `urllib.request` + Process Inspection | • Tự động quét tiến trình `language_server` đang chạy.<br>• Trích xuất cờ `--csrf_token` từ cmdline.<br>• Gọi trực tiếp API nội bộ: `POST 127.0.0.1:<port>/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary`<br>• Header: `x-codeium-csrf-token: <csrf_token>`<br>• Zero cloud dependency, phản hồi tức thì (< 2ms). |
-| **System Telemetry**| `psutil` | • Đọc % CPU tổng thể (`cpu_percent`) và % RAM đã dùng (`virtual_memory().percent`). |
-| **Hoạt động AI** | `json` (file IO) | • Đếm số prompt/turns gửi trong ngày từ `~/.gemini/antigravity-cli/history.jsonl`.<br>• Lấy model hiện tại từ `cli.log` (`label="Gemini 3.8 Flash (High)"`). |
-| **BLE Transport** | `dbus-fast` (D-Bus System Bus) | • Giao tiếp trực tiếp với BlueZ qua đường truyền `org.bluez.GattCharacteristic1`.<br>• **Không cần quét BLE (Zero Scanning)**: Gửi thẳng tới thiết bị đang kết nối HID, độ trễ < 5ms. |
+
+| Hạng mục                 | Công nghệ / Thư viện                | Đặc tả kỹ thuật & Giải pháp                                                                                                                                                                                                                                                                                                                                                  |
+| :------------------------- | :-------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Thu thập Quota**  | `urllib.request` + Process Inspection | • Tự động quét tiến trình `language_server` đang chạy.`<br>`• Trích xuất cờ `--csrf_token` từ cmdline.`<br>`• Gọi trực tiếp API nội bộ: `POST 127.0.0.1:<port>/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary<br>`• Header: `x-codeium-csrf-token: <csrf_token><br>`• Zero cloud dependency, phản hồi tức thì (< 2ms). |
+| **System Telemetry** | `psutil`                              | • Đọc % CPU tổng thể (`cpu_percent`) và % RAM đã dùng (`virtual_memory().percent`).                                                                                                                                                                                                                                                                                    |
+| **Hoạt động AI**  | `json` (file IO)                      | • Đếm số prompt/turns gửi trong ngày từ `~/.gemini/antigravity-cli/history.jsonl`.`<br>`• Lấy model hiện tại từ `cli.log` (`label="Gemini 3.8 Flash (High)"`).                                                                                                                                                                                                  |
+| **BLE Transport**    | `dbus-fast` (D-Bus System Bus)        | • Giao tiếp trực tiếp với BlueZ qua đường truyền `org.bluez.GattCharacteristic1`.`<br>`• **Không cần quét BLE (Zero Scanning)**: Gửi thẳng tới thiết bị đang kết nối HID, độ trễ < 5ms.                                                                                                                                                           |
 
 ### 2.2. Phía Thiết Bị Nhúng (ESP32-S3 Firmware)
-| Hạng mục | Thành phần | Đặc tả kỹ thuật & Giải pháp |
-| :--- | :--- | :--- |
-| **Hệ điều hành / RTOS** | ESP-IDF v5.3.5 / FreeRTOS | • Mô hình lập trình tách tầng, Non-blocking, chạy đa tác vụ. |
-| **GATT Service** | `components/ble_hid` | • Đăng ký song song 3 GATT Tables: **Device Info (0x180A)**, **HID Service (0x1812)** và **Custom PC Sync Service (0xFFE0)**.<br>• Characteristic `0xFFE1` hỗ trợ Read/Write/Write Without Response.<br>• Thiết lập `esp_ble_gatt_set_local_mtu(517)` nhận trọn vẹn gói tin JSON trong 1 khung truyền. |
-| **Parser & Protocol** | `components/pc_sync` | • Sử dụng thư viện nhúng `cJSON` tối ưu bộ nhớ.<br>• Quản lý trạng thái bằng `enum` tường minh. |
-| **UI & Báo hiệu** | `components/launchpad_core` | • Thuật toán đo bề rộng trực quan (**Visual Column Width**) bù trừ ký tự Unicode tiếng Việt và emoji 2-cột, đảm bảo bảng viền `|` thẳng tắp 100%.<br>• Tự động kích hoạt LED RGB WS2812 đổi màu cảnh báo khi Quota xuống thấp. |
+
+| Hạng mục                        | Thành phần                  | Đặc tả kỹ thuật & Giải pháp                                                                                                                                                                                                                                                                                                                  |
+| :-------------------------------- | :---------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hệ điều hành / RTOS** | ESP-IDF v5.3.5 / FreeRTOS     | • Mô hình lập trình tách tầng, Non-blocking, chạy đa tác vụ.                                                                                                                                                                                                                                                                             |
+| **GATT Service**            | `components/ble_hid`        | • Đăng ký song song 3 GATT Tables:**Device Info (0x180A)**, **HID Service (0x1812)** và **Custom PC Sync Service (0xFFE0)**.`<br>`• Characteristic `0xFFE1` hỗ trợ Read/Write/Write Without Response.`<br>`• Thiết lập `esp_ble_gatt_set_local_mtu(517)` nhận trọn vẹn gói tin JSON trong 1 khung truyền. |
+| **Parser & Protocol**       | `components/pc_sync`        | • Sử dụng thư viện nhúng `cJSON` tối ưu bộ nhớ.`<br>`• Quản lý trạng thái bằng `enum` tường minh.                                                                                                                                                                                                                           |
+| **UI & Báo hiệu**         | `components/launchpad_core` | • Thuật toán đo bề rộng trực quan (**Visual Column Width**) bù trừ ký tự Unicode tiếng Việt và emoji 2-cột, đảm bảo bảng viền `                                                                                                                                                                                           |
 
 ---
 
-## 3. Cấu Trúc Dữ Liệu & Giao Thức (Protocol Specification)
+## 3. Cấu Trúc Dữ Liệu & Gio Thức (Protocol Specification)
 
 ### 3.1. Định Dạng Gói Tin JSON (Host -> ESP32)
+
 Gói tin được gửi dưới dạng chuỗi UTF-8 JSON gọn nhẹ (142 bytes):
+
 ```json
 {
   "model": "Gemini 3.8 Flash (High)",
@@ -71,6 +75,7 @@ Gói tin được gửi dưới dạng chuỗi UTF-8 JSON gọn nhẹ (142 bytes
   "ram": 58
 }
 ```
+
 - `model`: Tên model AI đang được cấu hình trên Antigravity.
 - `time`: Giờ Việt Nam (UTC+7) chuẩn lấy từ Internet NTP/Google (độc lập với đồng hồ máy tính).
 - `quota` (hoặc `g_5h`): % Hạn mức 5 giờ của Gemini (hạn mức tiêu thụ chính khi dev).
@@ -86,6 +91,7 @@ Gói tin được gửi dưới dạng chuỗi UTF-8 JSON gọn nhẹ (142 bytes
 ### 3.2. Định Nghĩa Trạng Thái Máy (ESP32 State Machine)
 
 #### Trạng thái phân tích gói tin (`pc_sync_state_t`):
+
 ```c
 typedef enum {
     PC_SYNC_STATE_UNINITIALIZED = 0, // Module chưa khởi tạo
@@ -98,6 +104,7 @@ typedef enum {
 ```
 
 #### Mức độ cảnh báo Quota (`quota_alert_level_t`):
+
 ```c
 typedef enum {
     QUOTA_ALERT_SAFE = 0,    // Quota >= 50%  -> An toàn (🟢 Xanh lá)
@@ -125,6 +132,7 @@ typedef enum {
 ```
 
 > **Đặc điểm nổi bật:**
+>
 > 1. **Loại bỏ hoàn toàn icon rác**: Giữ tính tối giản, chỉ dùng nút chấm màu biểu thị cảnh báo trực quan.
 > 2. **Căn lề laser (Pixel-perfect Column Alignment)**: Mọi dòng đều có chiều rộng hiển thị chuẩn 70 cột ký tự; viền ngoài `|` và cột phân cách giữa `|` thẳng tắp.
 
@@ -133,12 +141,14 @@ typedef enum {
 ## 5. Công Cụ Host PC & Trình Điều Khiển Toàn Cục (`esp_quota`)
 
 ### 5.1. Tối Ưu Hóa CPU Siêu Nhẹ (< 0.05% CPU máy tính)
+
 - **LSP Process & Port Caching**: Không duyệt vòng lặp `/proc` liên tục. Lưu PID và port của Antigravity; chỉ kiểm tra `/proc/<cached_pid>` (thời gian xử lý < 0.1ms).
 - **Non-blocking System Metrics**: Đo `% CPU` với `interval=None` (zero wait/sleep).
 - **BlueZ D-Bus Object Caching**: Duy trì và tái sử dụng proxy đối tượng D-Bus, truyền lệnh BLE trực tiếp qua bộ nhớ bus trong < 1ms.
 - **NTP Time Offset Caching**: Chỉ đồng bộ sai lệch với NTP server 15 phút một lần. Trong chu kỳ bình thường, giờ Việt Nam được tính bằng công thức `time.time() + offset` với chi phí mạng = 0.
 
 ### 5.2. Công Cụ Toàn Cục `esp_quota` & Dịch Vụ Systemd
+
 - **Cài đặt 1-Click (`./install.sh`)**: Tự động cài đặt dependencies, đưa lệnh `esp_quota` vào `$PATH`, khởi tạo dịch vụ nền `systemd --user` và **mặc định tự khởi động cùng máy tính**.
 - **Điều khiển trực quan**: Gõ `esp_quota` ở bất kỳ thư mục nào để mở menu điều khiển hoặc sử dụng subcommands:
   - `esp_quota status`: Kiểm tra trạng thái dịch vụ, mức chiếm dụng CPU/RAM và Quota hiện tại.

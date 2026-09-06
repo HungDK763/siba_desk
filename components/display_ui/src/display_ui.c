@@ -25,6 +25,8 @@
 #include "touch_xpt2046.h"
 #include "earth_wallpaper.h"
 #include "ios_fonts.h"
+#include "mode_icons.h"
+#include "ble_hid.h"
 
 static const char *TAG = "DISP_UI";
 
@@ -49,9 +51,11 @@ static lv_disp_drv_t disp_drv;
 static lv_disp_draw_buf_t disp_buf;
 static lv_disp_t *disp_handle = NULL;
 
-// 2 Screen Handles
+// 4 Screen Handles
 static lv_obj_t *scr_console = NULL;
 static lv_obj_t *scr_home = NULL;
+static lv_obj_t *scr_gamepad = NULL;
+static lv_obj_t *scr_kb_mouse = NULL;
 
 // Screen 1 (Console) Widget Pointers
 static lv_obj_t *lbl_clock = NULL;
@@ -67,7 +71,7 @@ static lv_obj_t *bar_claude_w = NULL;
 
 static lv_obj_t *lbl_system = NULL;
 
-// Signal Bars (Screen 1 & Screen 2)
+// Signal Bars (Screen 1 & Screen 2 & Screen 3A & Screen 3B)
 static lv_obj_t *bar_sig_1 = NULL;
 static lv_obj_t *bar_sig_2 = NULL;
 static lv_obj_t *bar_sig_3 = NULL;
@@ -80,6 +84,18 @@ static lv_obj_t *h_bar_sig_3 = NULL;
 static lv_obj_t *h_bar_sig_4 = NULL;
 static lv_obj_t *h_lbl_sig_x = NULL;
 
+static lv_obj_t *gp_bar_sig_1 = NULL;
+static lv_obj_t *gp_bar_sig_2 = NULL;
+static lv_obj_t *gp_bar_sig_3 = NULL;
+static lv_obj_t *gp_bar_sig_4 = NULL;
+static lv_obj_t *gp_lbl_sig_x = NULL;
+
+static lv_obj_t *km_bar_sig_1 = NULL;
+static lv_obj_t *km_bar_sig_2 = NULL;
+static lv_obj_t *km_bar_sig_3 = NULL;
+static lv_obj_t *km_bar_sig_4 = NULL;
+static lv_obj_t *km_lbl_sig_x = NULL;
+
 // Screen 2 (Home) Widget Pointers
 static lv_obj_t *lbl_home_big_clock = NULL;
 static lv_obj_t *lbl_home_calendar = NULL;
@@ -87,6 +103,16 @@ static lv_obj_t *bar_home_gemini = NULL;
 static lv_obj_t *lbl_home_gem_val = NULL;
 static lv_obj_t *bar_home_claude = NULL;
 static lv_obj_t *lbl_home_cld_val = NULL;
+
+// Mode Selection Widgets on Home Screen
+static lv_obj_t *btn_home_gp = NULL;
+static lv_obj_t *btn_home_km = NULL;
+static lv_obj_t *img_home_gp = NULL;
+static lv_obj_t *img_home_km = NULL;
+
+// Mode Callback & State
+static display_ui_mode_change_cb_t s_mode_change_cb = NULL;
+static uint8_t s_active_mode = 0; // 0 = Gamepad, 1 = Keyboard+Mouse
 
 // Autonomous Internal Timekeeping & BLE State
 static bool s_ble_connected = false;
@@ -224,13 +250,13 @@ static void set_signal_level(int level) {
     lv_color_t c_on = lv_palette_main(LV_PALETTE_GREEN);
     lv_color_t c_off = lv_color_hex(0x475569);
 
-    lv_obj_t *b1_arr[] = {bar_sig_1, h_bar_sig_1};
-    lv_obj_t *b2_arr[] = {bar_sig_2, h_bar_sig_2};
-    lv_obj_t *b3_arr[] = {bar_sig_3, h_bar_sig_3};
-    lv_obj_t *b4_arr[] = {bar_sig_4, h_bar_sig_4};
-    lv_obj_t *x_arr[]  = {lbl_sig_x, h_lbl_sig_x};
+    lv_obj_t *b1_arr[] = {bar_sig_1, h_bar_sig_1, gp_bar_sig_1, km_bar_sig_1};
+    lv_obj_t *b2_arr[] = {bar_sig_2, h_bar_sig_2, gp_bar_sig_2, km_bar_sig_2};
+    lv_obj_t *b3_arr[] = {bar_sig_3, h_bar_sig_3, gp_bar_sig_3, km_bar_sig_3};
+    lv_obj_t *b4_arr[] = {bar_sig_4, h_bar_sig_4, gp_bar_sig_4, km_bar_sig_4};
+    lv_obj_t *x_arr[]  = {lbl_sig_x, h_lbl_sig_x, gp_lbl_sig_x, km_lbl_sig_x};
 
-    for (int s = 0; s < 2; s++) {
+    for (int s = 0; s < 4; s++) {
         if (!b1_arr[s]) continue;
 
         if (level <= 0) {
@@ -320,6 +346,43 @@ static void clock_tick_timer_cb(lv_timer_t *timer) {
     }
 }
 
+// Đăng ký callback khi chạm nút đổi Mode
+void display_ui_register_mode_change_cb(display_ui_mode_change_cb_t cb) {
+    s_mode_change_cb = cb;
+}
+
+// Cập nhật giao diện nút Mode đang kích hoạt (Highlight viền và màu)
+esp_err_t display_ui_set_active_mode(uint8_t mode) {
+    s_active_mode = mode;
+    if (lvgl_lock(100)) {
+        if (btn_home_gp && btn_home_km) {
+            if (mode == 0) { // GAMEPAD ACTIVE
+                lv_obj_set_style_border_color(btn_home_gp, lv_color_hex(0x38BDF8), 0); // Neon Cyan
+                lv_obj_set_style_border_width(btn_home_gp, 2, 0);
+                lv_obj_set_style_bg_color(btn_home_gp, lv_color_hex(0x1E293B), 0);
+                lv_obj_set_style_bg_opa(btn_home_gp, LV_OPA_90, 0);
+
+                lv_obj_set_style_border_color(btn_home_km, lv_color_hex(0x334155), 0);
+                lv_obj_set_style_border_width(btn_home_km, 1, 0);
+                lv_obj_set_style_bg_color(btn_home_km, lv_color_hex(0x0F172A), 0);
+                lv_obj_set_style_bg_opa(btn_home_km, LV_OPA_60, 0);
+            } else { // KEYBOARD + MOUSE ACTIVE
+                lv_obj_set_style_border_color(btn_home_km, lv_color_hex(0x10B981), 0); // Emerald Green
+                lv_obj_set_style_border_width(btn_home_km, 2, 0);
+                lv_obj_set_style_bg_color(btn_home_km, lv_color_hex(0x1E293B), 0);
+                lv_obj_set_style_bg_opa(btn_home_km, LV_OPA_90, 0);
+
+                lv_obj_set_style_border_color(btn_home_gp, lv_color_hex(0x334155), 0);
+                lv_obj_set_style_border_width(btn_home_gp, 1, 0);
+                lv_obj_set_style_bg_color(btn_home_gp, lv_color_hex(0x0F172A), 0);
+                lv_obj_set_style_bg_opa(btn_home_gp, LV_OPA_60, 0);
+            }
+        }
+        lvgl_unlock();
+    }
+    return ESP_OK;
+}
+
 // Navigation event callbacks
 static void nav_to_home_cb(lv_event_t *e) {
     if (scr_home) {
@@ -333,6 +396,146 @@ static void nav_to_console_cb(lv_event_t *e) {
     }
 }
 
+static void nav_to_gamepad_cb(lv_event_t *e) {
+    display_ui_set_active_mode(0);
+    if (s_mode_change_cb) {
+        s_mode_change_cb(0);
+    }
+    if (scr_gamepad) {
+        lv_scr_load_anim(scr_gamepad, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+    }
+}
+
+static void nav_to_kb_mouse_cb(lv_event_t *e) {
+    display_ui_set_active_mode(1);
+    if (s_mode_change_cb) {
+        s_mode_change_cb(1);
+    }
+    if (scr_kb_mouse) {
+        lv_scr_load_anim(scr_kb_mouse, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
+    }
+}
+
+static void nav_back_to_home_cb(lv_event_t *e) {
+    if (scr_home) {
+        lv_scr_load_anim(scr_home, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, false);
+    }
+}
+
+// Gamepad virtual controls state
+static uint16_t s_gp_buttons = 0;
+static uint8_t  s_gp_dpad = GAMEPAD_DPAD_CENTER;
+static uint16_t s_gp_l2 = 0;
+static uint16_t s_gp_r2 = 0;
+
+static void send_current_gamepad_state(void) {
+    if (ble_hid_is_connected()) {
+        ble_hid_send_xbox_gamepad(32768, 32768, 32768, 32768, s_gp_l2, s_gp_r2, s_gp_buttons, s_gp_dpad);
+    }
+}
+
+static void gp_btn_action_cb(lv_event_t *e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    uint32_t btn_mask = (uint32_t)(uintptr_t)lv_event_get_user_data(e);
+
+    if (code == LV_EVENT_PRESSED) {
+        s_gp_buttons |= (uint16_t)btn_mask;
+        send_current_gamepad_state();
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        s_gp_buttons &= ~((uint16_t)btn_mask);
+        send_current_gamepad_state();
+    }
+}
+
+static void gp_dpad_action_cb(lv_event_t *e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    uint8_t dpad_dir = (uint8_t)(uintptr_t)lv_event_get_user_data(e);
+
+    if (code == LV_EVENT_PRESSED) {
+        s_gp_dpad = dpad_dir;
+        send_current_gamepad_state();
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        s_gp_dpad = GAMEPAD_DPAD_CENTER;
+        send_current_gamepad_state();
+    }
+}
+
+static void gp_trigger_action_cb(lv_event_t *e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    uint32_t which = (uint32_t)(uintptr_t)lv_event_get_user_data(e);
+
+    if (code == LV_EVENT_PRESSED) {
+        if (which == 1) s_gp_l2 = 1023;
+        else if (which == 2) s_gp_r2 = 1023;
+        send_current_gamepad_state();
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        if (which == 1) s_gp_l2 = 0;
+        else if (which == 2) s_gp_r2 = 0;
+        send_current_gamepad_state();
+    }
+}
+
+// Mouse & Keyboard virtual controls state
+static void mouse_btn_action_cb(lv_event_t *e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    uint8_t btn = (uint8_t)(uintptr_t)lv_event_get_user_data(e);
+
+    if (code == LV_EVENT_PRESSED) {
+        ble_hid_send_mouse(btn, 0, 0, 0);
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        ble_hid_send_mouse(0, 0, 0, 0);
+    }
+}
+
+static void mouse_scroll_action_cb(lv_event_t *e) {
+    int8_t wheel = (int8_t)(intptr_t)lv_event_get_user_data(e);
+    ble_hid_send_mouse(0, 0, 0, wheel);
+}
+
+static lv_point_t s_trackpad_last_pt = {0, 0};
+static void trackpad_touch_cb(lv_event_t *e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_indev_t *indev = lv_indev_get_act();
+    if (!indev) return;
+
+    if (code == LV_EVENT_PRESSED) {
+        lv_indev_get_point(indev, &s_trackpad_last_pt);
+    } else if (code == LV_EVENT_PRESSING) {
+        lv_point_t pt;
+        lv_indev_get_point(indev, &pt);
+        int dx = pt.x - s_trackpad_last_pt.x;
+        int dy = pt.y - s_trackpad_last_pt.y;
+        if (dx != 0 || dy != 0) {
+            ble_hid_send_mouse(0, (int8_t)(dx * 2), (int8_t)(dy * 2), 0);
+            s_trackpad_last_pt = pt;
+        }
+    }
+}
+
+static void kb_key_action_cb(lv_event_t *e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    uint32_t param = (uint32_t)(uintptr_t)lv_event_get_user_data(e);
+    uint8_t modifier = (uint8_t)(param >> 8);
+    uint8_t key_code = (uint8_t)(param & 0xFF);
+
+    if (code == LV_EVENT_PRESSED) {
+        ble_hid_send_keyboard(modifier, key_code);
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        ble_hid_send_keyboard(0, 0);
+    }
+}
+
+static void media_key_action_cb(lv_event_t *e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    uint8_t mask = (uint8_t)(uintptr_t)lv_event_get_user_data(e);
+
+    if (code == LV_EVENT_PRESSED) {
+        ble_hid_send_consumer(mask);
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        ble_hid_send_consumer(0);
+    }
+}
+
 esp_err_t display_ui_toggle_screen(void) {
     if (lvgl_lock(100)) {
         lv_obj_t *act = lv_scr_act();
@@ -340,10 +543,36 @@ esp_err_t display_ui_toggle_screen(void) {
             lv_scr_load_anim(scr_home, LV_SCR_LOAD_ANIM_MOVE_LEFT, 250, 0, false);
         } else if (act == scr_home && scr_console) {
             lv_scr_load_anim(scr_console, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, false);
+        } else if ((act == scr_gamepad || act == scr_kb_mouse) && scr_home) {
+            lv_scr_load_anim(scr_home, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 250, 0, false);
         }
         lvgl_unlock();
     }
     return ESP_OK;
+}
+
+// Helper: Create stylized control button
+static lv_obj_t* create_control_btn(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t w, lv_coord_t h,
+                                   const char *text, lv_color_t bg_col, lv_color_t txt_col,
+                                   lv_event_cb_t cb, void *user_data, lv_event_code_t filter) {
+    lv_obj_t *btn = lv_btn_create(parent);
+    lv_obj_set_pos(btn, x, y);
+    lv_obj_set_size(btn, w, h);
+    lv_obj_set_style_bg_color(btn, bg_col, 0);
+    lv_obj_set_style_radius(btn, 6, 0);
+    lv_obj_set_style_pad_all(btn, 0, 0);
+    lv_obj_set_style_border_color(btn, lv_color_hex(0x475569), 0);
+    lv_obj_set_style_border_width(btn, 1, 0);
+    lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *lbl = lv_label_create(btn);
+    lv_label_set_text(lbl, text);
+    lv_obj_set_style_text_color(lbl, txt_col, 0);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, 0);
+    lv_obj_center(lbl);
+
+    lv_obj_add_event_cb(btn, cb, filter, user_data);
+    return btn;
 }
 
 // =========================================================================
@@ -529,17 +758,11 @@ static void build_console_screen(void) {
 }
 
 // =========================================================================
-// SCREEN 2: Home Screen (Giant Clock + Calendar + Mini Quota)
-// =========================================================================
-// =========================================================================
-// SCREEN 2: Home Screen (Giant Clock + Calendar + Mini Quota)
+// SCREEN 2: Home Screen (Giant Clock + Calendar + Mini Quota + Mode Buttons)
 // =========================================================================
 static void build_home_screen(void) {
     scr_home = lv_obj_create(NULL);
     lv_obj_clear_flag(scr_home, LV_OBJ_FLAG_SCROLLABLE);
-
-    // Cho phép chạm vào bất kỳ đâu trên màn hình Home để chuyển về Console
-    lv_obj_add_event_cb(scr_home, nav_to_console_cb, LV_EVENT_CLICKED, NULL);
 
     // 1. BACKGROUND: Hình nền Trái Đất chụp từ không gian (320x240)
     lv_obj_t *bg_img = lv_img_create(scr_home);
@@ -577,21 +800,51 @@ static void build_home_screen(void) {
     lv_obj_t *sig_cont = create_signal_widget(sig_pill, &h_bar_sig_1, &h_bar_sig_2, &h_bar_sig_3, &h_bar_sig_4, &h_lbl_sig_x);
     lv_obj_center(sig_cont);
 
-    // 3. GIANT iPHONE CLOCK (Hạ thấp xuống đúng chính giữa màn hình)
+    // 3. MODE SELECT BUTTONS (Bên trái màn hình Home: Gamepad & Keyboard+Mouse)
+    btn_home_gp = lv_btn_create(scr_home);
+    lv_obj_set_size(btn_home_gp, 44, 44);
+    lv_obj_set_pos(btn_home_gp, 12, 48);
+    lv_obj_set_style_radius(btn_home_gp, 10, 0);
+    lv_obj_set_style_pad_all(btn_home_gp, 0, 0);
+    lv_obj_clear_flag(btn_home_gp, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(btn_home_gp, nav_to_gamepad_cb, LV_EVENT_CLICKED, NULL);
+
+    img_home_gp = lv_img_create(btn_home_gp);
+    lv_img_set_src(img_home_gp, &img_icon_gamepad);
+    lv_obj_center(img_home_gp);
+    lv_obj_clear_flag(img_home_gp, LV_OBJ_FLAG_CLICKABLE);
+
+    btn_home_km = lv_btn_create(scr_home);
+    lv_obj_set_size(btn_home_km, 44, 44);
+    lv_obj_set_pos(btn_home_km, 12, 102);
+    lv_obj_set_style_radius(btn_home_km, 10, 0);
+    lv_obj_set_style_pad_all(btn_home_km, 0, 0);
+    lv_obj_clear_flag(btn_home_km, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(btn_home_km, nav_to_kb_mouse_cb, LV_EVENT_CLICKED, NULL);
+
+    img_home_km = lv_img_create(btn_home_km);
+    lv_img_set_src(img_home_km, &img_icon_kb_mouse);
+    lv_obj_center(img_home_km);
+    lv_obj_clear_flag(img_home_km, LV_OBJ_FLAG_CLICKABLE);
+
+    // Cập nhật trạng thái viền/nền theo Mode đang kích hoạt
+    display_ui_set_active_mode(s_active_mode);
+
+    // 4. GIANT iPHONE CLOCK (Hạ thấp xuống chính giữa màn hình, dịch sang phải 40px)
     lbl_home_big_clock = lv_label_create(scr_home);
     lv_label_set_text(lbl_home_big_clock, "21:49");
     lv_obj_set_style_text_color(lbl_home_big_clock, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_home_big_clock, &font_sf_pro_rounded_60, 0);
-    lv_obj_align(lbl_home_big_clock, LV_ALIGN_CENTER, 0, -10);
+    lv_obj_align(lbl_home_big_clock, LV_ALIGN_CENTER, 40, -10);
 
-    // 4. DATE SUBTITLE (Thứ cách ngày tháng, đặt cao hơn 10px)
+    // 5. DATE SUBTITLE (Thứ cách ngày tháng, đặt cao hơn 10px, đi theo đồng hồ +40px)
     lbl_home_calendar = lv_label_create(scr_home);
     lv_label_set_text(lbl_home_calendar, "CN,  6 thg 9");
     lv_obj_set_style_text_color(lbl_home_calendar, lv_color_hex(0xE2E8F0), 0);
     lv_obj_set_style_text_font(lbl_home_calendar, &font_sf_pro_rounded_16, 0);
     lv_obj_align_to(lbl_home_calendar, lbl_home_big_clock, LV_ALIGN_OUT_TOP_MID, 0, -18);
 
-    // 5. MINI QUOTA WIDGET (Thẻ kính mờ nổi trên vòm khí quyển Trái Đất)
+    // 6. MINI QUOTA WIDGET (Thẻ kính mờ nổi trên vòm khí quyển Trái Đất)
     lv_obj_t *panel_mini = lv_obj_create(scr_home);
     lv_obj_set_size(panel_mini, 304, 52);
     lv_obj_set_style_bg_color(panel_mini, lv_color_hex(0x0B1329), 0);
@@ -653,6 +906,225 @@ static void build_home_screen(void) {
     lv_obj_set_style_text_color(lbl_home_cld_val, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_home_cld_val, &lv_font_montserrat_14, 0);
     lv_obj_set_pos(lbl_home_cld_val, 256, 24);
+}
+
+// =========================================================================
+// SCREEN 3A: Dedicated Touchscreen Gamepad Window
+// =========================================================================
+static void build_gamepad_screen(void) {
+    scr_gamepad = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(scr_gamepad, lv_color_hex(0x0F172A), 0);
+    lv_obj_set_style_bg_opa(scr_gamepad, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(scr_gamepad, LV_OBJ_FLAG_SCROLLABLE);
+
+    // 1. TOP BAR
+    lv_obj_t *top_bar = lv_obj_create(scr_gamepad);
+    lv_obj_set_pos(top_bar, 0, 0);
+    lv_obj_set_size(top_bar, 320, 30);
+    lv_obj_set_style_bg_color(top_bar, lv_color_hex(0x1E293B), 0);
+    lv_obj_set_style_bg_opa(top_bar, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(top_bar, 0, 0);
+    lv_obj_set_style_border_width(top_bar, 0, 0);
+    lv_obj_set_style_pad_all(top_bar, 0, 0);
+    lv_obj_clear_flag(top_bar, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *btn_back = lv_btn_create(top_bar);
+    lv_obj_set_size(btn_back, 74, 24);
+    lv_obj_align(btn_back, LV_ALIGN_LEFT_MID, 4, 0);
+    lv_obj_set_style_bg_opa(btn_back, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(btn_back, 0, 0);
+    lv_obj_set_style_pad_all(btn_back, 0, 0);
+    lv_obj_add_event_cb(btn_back, nav_back_to_home_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *lbl_back = lv_label_create(btn_back);
+    lv_label_set_text(lbl_back, LV_SYMBOL_LEFT " HOME");
+    lv_obj_set_style_text_color(lbl_back, lv_color_hex(0x38BDF8), 0);
+    lv_obj_set_style_text_font(lbl_back, &lv_font_montserrat_14, 0);
+    lv_obj_align(lbl_back, LV_ALIGN_LEFT_MID, 4, 0);
+
+    lv_obj_t *lbl_title = lv_label_create(top_bar);
+    lv_label_set_text(lbl_title, "GAMEPAD (XBOX)");
+    lv_obj_set_style_text_color(lbl_title, lv_color_hex(0xF1F5F9), 0);
+    lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_14, 0);
+    lv_obj_align(lbl_title, LV_ALIGN_CENTER, 0, 0);
+
+    lv_obj_t *sig_cont = create_signal_widget(top_bar, &gp_bar_sig_1, &gp_bar_sig_2, &gp_bar_sig_3, &gp_bar_sig_4, &gp_lbl_sig_x);
+    lv_obj_align(sig_cont, LV_ALIGN_RIGHT_MID, -8, 0);
+
+    // 2. BUMPERS & TRIGGERS (Row Y=36)
+    create_control_btn(scr_gamepad, 10, 36, 52, 28, "LB", lv_color_hex(0x334155), lv_color_hex(0xE2E8F0),
+                       gp_btn_action_cb, (void*)(uintptr_t)XBOX_BUTTON_L1, LV_EVENT_ALL);
+    create_control_btn(scr_gamepad, 68, 36, 52, 28, "LT", lv_color_hex(0x1E293B), lv_color_hex(0x38BDF8),
+                       gp_trigger_action_cb, (void*)(uintptr_t)1, LV_EVENT_ALL);
+    create_control_btn(scr_gamepad, 200, 36, 52, 28, "RT", lv_color_hex(0x1E293B), lv_color_hex(0x38BDF8),
+                       gp_trigger_action_cb, (void*)(uintptr_t)2, LV_EVENT_ALL);
+    create_control_btn(scr_gamepad, 258, 36, 52, 28, "RB", lv_color_hex(0x334155), lv_color_hex(0xE2E8F0),
+                       gp_btn_action_cb, (void*)(uintptr_t)XBOX_BUTTON_R1, LV_EVENT_ALL);
+
+    // 3. CENTER: SELECT & START
+    create_control_btn(scr_gamepad, 114, 96, 42, 28, "SEL", lv_color_hex(0x1E293B), lv_color_hex(0x94A3B8),
+                       gp_btn_action_cb, (void*)(uintptr_t)XBOX_BUTTON_SELECT, LV_EVENT_ALL);
+    create_control_btn(scr_gamepad, 164, 96, 42, 28, "STA", lv_color_hex(0x1E293B), lv_color_hex(0x94A3B8),
+                       gp_btn_action_cb, (void*)(uintptr_t)XBOX_BUTTON_START, LV_EVENT_ALL);
+
+    // 4. LEFT: D-PAD CROSS
+    create_control_btn(scr_gamepad, 52, 78, 36, 36, LV_SYMBOL_UP, lv_color_hex(0x1E293B), lv_color_hex(0x38BDF8),
+                       gp_dpad_action_cb, (void*)(uintptr_t)GAMEPAD_DPAD_UP, LV_EVENT_ALL);
+    create_control_btn(scr_gamepad, 12, 118, 36, 36, LV_SYMBOL_LEFT, lv_color_hex(0x1E293B), lv_color_hex(0x38BDF8),
+                       gp_dpad_action_cb, (void*)(uintptr_t)GAMEPAD_DPAD_LEFT, LV_EVENT_ALL);
+    create_control_btn(scr_gamepad, 92, 118, 36, 36, LV_SYMBOL_RIGHT, lv_color_hex(0x1E293B), lv_color_hex(0x38BDF8),
+                       gp_dpad_action_cb, (void*)(uintptr_t)GAMEPAD_DPAD_RIGHT, LV_EVENT_ALL);
+    create_control_btn(scr_gamepad, 52, 158, 36, 36, LV_SYMBOL_DOWN, lv_color_hex(0x1E293B), lv_color_hex(0x38BDF8),
+                       gp_dpad_action_cb, (void*)(uintptr_t)GAMEPAD_DPAD_DOWN, LV_EVENT_ALL);
+
+    lv_obj_t *dpad_center = lv_obj_create(scr_gamepad);
+    lv_obj_set_pos(dpad_center, 56, 122);
+    lv_obj_set_size(dpad_center, 28, 28);
+    lv_obj_set_style_bg_color(dpad_center, lv_color_hex(0x0F172A), 0);
+    lv_obj_set_style_border_width(dpad_center, 0, 0);
+    lv_obj_set_style_radius(dpad_center, 4, 0);
+    lv_obj_clear_flag(dpad_center, LV_OBJ_FLAG_CLICKABLE);
+
+    // 5. RIGHT: ACTION BUTTONS (Y, X, B, A in Xbox Colors)
+    create_control_btn(scr_gamepad, 232, 78, 38, 38, "Y", lv_color_hex(0xEAB308), lv_color_black(),
+                       gp_btn_action_cb, (void*)(uintptr_t)XBOX_BUTTON_Y, LV_EVENT_ALL);
+    create_control_btn(scr_gamepad, 190, 118, 38, 38, "X", lv_color_hex(0x3B82F6), lv_color_white(),
+                       gp_btn_action_cb, (void*)(uintptr_t)XBOX_BUTTON_X, LV_EVENT_ALL);
+    create_control_btn(scr_gamepad, 274, 118, 38, 38, "B", lv_color_hex(0xEF4444), lv_color_white(),
+                       gp_btn_action_cb, (void*)(uintptr_t)XBOX_BUTTON_B, LV_EVENT_ALL);
+    create_control_btn(scr_gamepad, 232, 158, 38, 38, "A", lv_color_hex(0x22C55E), lv_color_black(),
+                       gp_btn_action_cb, (void*)(uintptr_t)XBOX_BUTTON_A, LV_EVENT_ALL);
+
+    // Bottom Hint Label
+    lv_obj_t *lbl_hint = lv_label_create(scr_gamepad);
+    lv_label_set_text(lbl_hint, "Touch screen to control Gamepad");
+    lv_obj_set_style_text_color(lbl_hint, lv_color_hex(0x64748B), 0);
+    lv_obj_set_style_text_font(lbl_hint, &lv_font_montserrat_14, 0);
+    lv_obj_align(lbl_hint, LV_ALIGN_BOTTOM_MID, 0, -8);
+}
+
+// =========================================================================
+// SCREEN 3B: Dedicated Touchscreen Keyboard & Mouse Window
+// =========================================================================
+static void build_kb_mouse_screen(void) {
+    scr_kb_mouse = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(scr_kb_mouse, lv_color_hex(0x0F172A), 0);
+    lv_obj_set_style_bg_opa(scr_kb_mouse, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(scr_kb_mouse, LV_OBJ_FLAG_SCROLLABLE);
+
+    // 1. TOP BAR
+    lv_obj_t *top_bar = lv_obj_create(scr_kb_mouse);
+    lv_obj_set_pos(top_bar, 0, 0);
+    lv_obj_set_size(top_bar, 320, 30);
+    lv_obj_set_style_bg_color(top_bar, lv_color_hex(0x1E293B), 0);
+    lv_obj_set_style_bg_opa(top_bar, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(top_bar, 0, 0);
+    lv_obj_set_style_border_width(top_bar, 0, 0);
+    lv_obj_set_style_pad_all(top_bar, 0, 0);
+    lv_obj_clear_flag(top_bar, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *btn_back = lv_btn_create(top_bar);
+    lv_obj_set_size(btn_back, 74, 24);
+    lv_obj_align(btn_back, LV_ALIGN_LEFT_MID, 4, 0);
+    lv_obj_set_style_bg_opa(btn_back, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(btn_back, 0, 0);
+    lv_obj_set_style_pad_all(btn_back, 0, 0);
+    lv_obj_add_event_cb(btn_back, nav_back_to_home_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *lbl_back = lv_label_create(btn_back);
+    lv_label_set_text(lbl_back, LV_SYMBOL_LEFT " HOME");
+    lv_obj_set_style_text_color(lbl_back, lv_color_hex(0x38BDF8), 0);
+    lv_obj_set_style_text_font(lbl_back, &lv_font_montserrat_14, 0);
+    lv_obj_align(lbl_back, LV_ALIGN_LEFT_MID, 4, 0);
+
+    lv_obj_t *lbl_title = lv_label_create(top_bar);
+    lv_label_set_text(lbl_title, "KEYBOARD & MOUSE");
+    lv_obj_set_style_text_color(lbl_title, lv_color_hex(0x10B981), 0);
+    lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_14, 0);
+    lv_obj_align(lbl_title, LV_ALIGN_CENTER, 0, 0);
+
+    lv_obj_t *sig_cont = create_signal_widget(top_bar, &km_bar_sig_1, &km_bar_sig_2, &km_bar_sig_3, &km_bar_sig_4, &km_lbl_sig_x);
+    lv_obj_align(sig_cont, LV_ALIGN_RIGHT_MID, -8, 0);
+
+    // 2. LEFT: TRACKPAD & MOUSE (X=8, Width 140)
+    lv_obj_t *trackpad = lv_obj_create(scr_kb_mouse);
+    lv_obj_set_pos(trackpad, 8, 34);
+    lv_obj_set_size(trackpad, 140, 122);
+    lv_obj_set_style_bg_color(trackpad, lv_color_hex(0x1E293B), 0);
+    lv_obj_set_style_bg_opa(trackpad, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(trackpad, lv_color_hex(0x475569), 0);
+    lv_obj_set_style_border_width(trackpad, 1, 0);
+    lv_obj_set_style_radius(trackpad, 8, 0);
+    lv_obj_set_style_pad_all(trackpad, 0, 0);
+    lv_obj_clear_flag(trackpad, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(trackpad, trackpad_touch_cb, LV_EVENT_ALL, NULL);
+
+    lv_obj_t *lbl_tp = lv_label_create(trackpad);
+    lv_label_set_text(lbl_tp, "TRACKPAD\nDrag to Move");
+    lv_obj_set_style_text_color(lbl_tp, lv_color_hex(0x64748B), 0);
+    lv_obj_set_style_text_font(lbl_tp, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_align(lbl_tp, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_center(lbl_tp);
+
+    // Left Click & Right Click
+    create_control_btn(scr_kb_mouse, 8, 160, 68, 32, "L-CLICK", lv_color_hex(0x0284C7), lv_color_white(),
+                       mouse_btn_action_cb, (void*)(uintptr_t)MOUSE_BUTTON_LEFT, LV_EVENT_ALL);
+    create_control_btn(scr_kb_mouse, 80, 160, 68, 32, "R-CLICK", lv_color_hex(0xD97706), lv_color_white(),
+                       mouse_btn_action_cb, (void*)(uintptr_t)MOUSE_BUTTON_RIGHT, LV_EVENT_ALL);
+
+    // Scroll Up & Scroll Down
+    create_control_btn(scr_kb_mouse, 8, 196, 68, 32, LV_SYMBOL_UP " SCRL", lv_color_hex(0x1E293B), lv_color_hex(0x38BDF8),
+                       mouse_scroll_action_cb, (void*)(intptr_t)1, LV_EVENT_CLICKED);
+    create_control_btn(scr_kb_mouse, 80, 196, 68, 32, LV_SYMBOL_DOWN " SCRL", lv_color_hex(0x1E293B), lv_color_hex(0x38BDF8),
+                       mouse_scroll_action_cb, (void*)(intptr_t)-1, LV_EVENT_CLICKED);
+
+    // 3. RIGHT: KEYBOARD & SHORTCUTS (X=156)
+    create_control_btn(scr_kb_mouse, 156, 34, 36, 28, "ESC", lv_color_hex(0xDC2626), lv_color_white(),
+                       kb_key_action_cb, (void*)(uintptr_t)HID_KEY_ESCAPE, LV_EVENT_ALL);
+    create_control_btn(scr_kb_mouse, 195, 34, 36, 28, "TAB", lv_color_hex(0x334155), lv_color_white(),
+                       kb_key_action_cb, (void*)(uintptr_t)HID_KEY_TAB, LV_EVENT_ALL);
+    create_control_btn(scr_kb_mouse, 234, 34, 38, 28, "ENT", lv_color_hex(0x15803D), lv_color_white(),
+                       kb_key_action_cb, (void*)(uintptr_t)HID_KEY_ENTER, LV_EVENT_ALL);
+    create_control_btn(scr_kb_mouse, 275, 34, 37, 28, "DEL", lv_color_hex(0x334155), lv_color_white(),
+                       kb_key_action_cb, (void*)(uintptr_t)0x4C, LV_EVENT_ALL);
+
+    create_control_btn(scr_kb_mouse, 156, 66, 75, 28, "SPACE", lv_color_hex(0x334155), lv_color_white(),
+                       kb_key_action_cb, (void*)(uintptr_t)HID_KEY_SPACE, LV_EVENT_ALL);
+    create_control_btn(scr_kb_mouse, 234, 66, 38, 28, "WIN", lv_color_hex(0x2563EB), lv_color_white(),
+                       kb_key_action_cb, (void*)(uintptr_t)((KEY_MOD_LMETA << 8) | 0), LV_EVENT_ALL);
+    create_control_btn(scr_kb_mouse, 275, 66, 37, 28, "BS", lv_color_hex(0x334155), lv_color_white(),
+                       kb_key_action_cb, (void*)(uintptr_t)HID_KEY_BACKSPACE, LV_EVENT_ALL);
+
+    create_control_btn(scr_kb_mouse, 156, 98, 75, 28, "COPY", lv_color_hex(0x4338CA), lv_color_white(),
+                       kb_key_action_cb, (void*)(uintptr_t)((KEY_MOD_LCTRL << 8) | HID_KEY_C), LV_EVENT_ALL);
+    create_control_btn(scr_kb_mouse, 234, 98, 78, 28, "PASTE", lv_color_hex(0x6D28D9), lv_color_white(),
+                       kb_key_action_cb, (void*)(uintptr_t)((KEY_MOD_LCTRL << 8) | 0x19), LV_EVENT_ALL);
+
+    lv_obj_t *h_sep = lv_obj_create(scr_kb_mouse);
+    lv_obj_set_pos(h_sep, 156, 130);
+    lv_obj_set_size(h_sep, 156, 1);
+    lv_obj_set_style_bg_color(h_sep, lv_color_hex(0x334155), 0);
+    lv_obj_set_style_border_width(h_sep, 0, 0);
+
+    lv_obj_t *lbl_med = lv_label_create(scr_kb_mouse);
+    lv_label_set_text(lbl_med, "MEDIA CONTROLS");
+    lv_obj_set_style_text_color(lbl_med, lv_color_hex(0x64748B), 0);
+    lv_obj_set_style_text_font(lbl_med, &lv_font_montserrat_14, 0);
+    lv_obj_set_pos(lbl_med, 156, 138);
+
+    create_control_btn(scr_kb_mouse, 156, 158, 36, 32, "MUTE", lv_color_hex(0x1E293B), lv_color_hex(0xEF4444),
+                       media_key_action_cb, (void*)(uintptr_t)CONSUMER_MUTE, LV_EVENT_ALL);
+    create_control_btn(scr_kb_mouse, 195, 158, 36, 32, "V -", lv_color_hex(0x1E293B), lv_color_hex(0x38BDF8),
+                       media_key_action_cb, (void*)(uintptr_t)CONSUMER_VOLUME_DOWN, LV_EVENT_ALL);
+    create_control_btn(scr_kb_mouse, 234, 158, 38, 32, "V +", lv_color_hex(0x1E293B), lv_color_hex(0x38BDF8),
+                       media_key_action_cb, (void*)(uintptr_t)CONSUMER_VOLUME_UP, LV_EVENT_ALL);
+    create_control_btn(scr_kb_mouse, 275, 158, 37, 32, LV_SYMBOL_PLAY, lv_color_hex(0x1E293B), lv_color_hex(0x10B981),
+                       media_key_action_cb, (void*)(uintptr_t)CONSUMER_PLAY_PAUSE, LV_EVENT_ALL);
+
+    create_control_btn(scr_kb_mouse, 156, 196, 75, 32, LV_SYMBOL_PREV " PREV", lv_color_hex(0x1E293B), lv_color_hex(0xCBD5E1),
+                       media_key_action_cb, (void*)(uintptr_t)CONSUMER_SCAN_PREV, LV_EVENT_ALL);
+    create_control_btn(scr_kb_mouse, 234, 196, 78, 32, "NEXT " LV_SYMBOL_NEXT, lv_color_hex(0x1E293B), lv_color_hex(0xCBD5E1),
+                       media_key_action_cb, (void*)(uintptr_t)CONSUMER_SCAN_NEXT, LV_EVENT_ALL);
 }
 
 // =========================================================================
@@ -887,10 +1359,12 @@ esp_err_t display_ui_init(void) {
     assert(lvgl_mux);
     xTaskCreate(lvgl_task, "LVGL", 4 * 1024, NULL, 2, NULL);
 
-    // 10. Build Screens (Console + Home)
+    // 10. Build Screens (Console + Home + Gamepad + Keyboard/Mouse)
     if (lvgl_lock(-1)) {
         build_console_screen();
         build_home_screen();
+        build_gamepad_screen();
+        build_kb_mouse_screen();
         lv_scr_load(scr_console); // Mặc định mở màn hình Dashboard Quota
         set_signal_level(0);       // Khởi động chưa có BLE: hiện dấu x đỏ
 

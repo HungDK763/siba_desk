@@ -35,6 +35,18 @@ esp_err_t display_ui_toggle_screen(void);
  */
 esp_err_t display_ui_set_ble_connected(bool connected);
 
+typedef void (*display_ui_mode_change_cb_t)(uint8_t mode);
+
+/**
+ * @brief Đăng ký callback khi người dùng chọn chuyển Mode trên màn hình UI
+ */
+void display_ui_register_mode_change_cb(display_ui_mode_change_cb_t cb);
+
+/**
+ * @brief Cập nhật trạng thái hiển thị của nút Mode (highlight nút tương ứng)
+ */
+esp_err_t display_ui_set_active_mode(uint8_t mode);
+
 #ifdef __cplusplus
 }
 #endif

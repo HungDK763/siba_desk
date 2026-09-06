@@ -9,10 +9,26 @@
 extern "C" {
 #endif
 
+typedef enum {
+    LP_MODE_GAMEPAD = 0,
+    LP_MODE_KB_MOUSE = 1,
+    LP_MODE_MAX
+} launchpad_mode_t;
+
 /**
  * @brief Initialize LaunchPad core controller & GPIO input monitoring tasks
  */
 esp_err_t launchpad_core_init(void);
+
+/**
+ * @brief Set current input mode (Gamepad or Keyboard+Mouse)
+ */
+void launchpad_core_set_mode(launchpad_mode_t mode);
+
+/**
+ * @brief Get current input mode
+ */
+launchpad_mode_t launchpad_core_get_mode(void);
 
 /**
  * @brief Trigger a pad event on the LaunchPad

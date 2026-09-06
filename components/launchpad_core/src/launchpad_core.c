@@ -19,18 +19,10 @@ static const char *TAG = "LP_CORE";
 #define MODE_SWITCH_TICKS pdMS_TO_TICKS(2000) // 2 seconds to switch mode
 #define BOND_CLEAR_TICKS  pdMS_TO_TICKS(6000) // 6 seconds to clear bonds
 
-typedef enum {
-    LP_MODE_GAMEPAD = 0,
-    LP_MODE_KEYBOARD,
-    LP_MODE_MOUSE,
-    LP_MODE_MAX
-} launchpad_mode_t;
-
 static launchpad_mode_t current_mode = LP_MODE_GAMEPAD;
 static const char *mode_names[LP_MODE_MAX] = {
-    "GAMEPAD 🎮 (Nút A + Cần trái LÊN MAX / PC & Bluepad32)",
-    "KEYBOARD ⌨️ (Phím Space / Trình duyệt & Game)",
-    "MOUSE 🖱️ (Click Chuột Trái / Left Click)"
+    "GAMEPAD 🎮 (Xbox Controller)",
+    "KEYBOARD & MOUSE ⌨️🖱️ (Bàn phím + Chuột)"
 };
 
 static uint16_t current_pad_mask = 0;
@@ -66,18 +58,49 @@ static void launchpad_set_led_mode(launchpad_mode_t mode) {
             // 🔴 RED = Gamepad Mode
             led_strip_set_pixel(led_strip, 0, 40, 0, 0);
             break;
-        case LP_MODE_KEYBOARD:
-            // 🟢 GREEN = Keyboard Mode
-            led_strip_set_pixel(led_strip, 0, 0, 40, 0);
-            break;
-        case LP_MODE_MOUSE:
-            // 🔵 BLUE = Mouse Mode
-            led_strip_set_pixel(led_strip, 0, 0, 0, 40);
+        case LP_MODE_KB_MOUSE:
+            // 🟢 GREEN / CYAN = Keyboard & Mouse Mode
+            led_strip_set_pixel(led_strip, 0, 0, 35, 20);
             break;
         default:
             break;
     }
     led_strip_refresh(led_strip);
+}
+
+static void launchpad_release_all_inputs(void) {
+    if (ble_hid_is_connected()) {
+        switch (current_mode) {
+            case LP_MODE_GAMEPAD:
+                ble_hid_send_xbox_gamepad(32768, 32768, 32768, 32768, 0, 0, 0, GAMEPAD_DPAD_CENTER);
+                break;
+            case LP_MODE_KB_MOUSE:
+                ble_hid_send_keyboard(0, 0);
+                ble_hid_send_mouse(0, 0, 0, 0);
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+void launchpad_core_set_mode(launchpad_mode_t mode) {
+    if (mode >= LP_MODE_MAX) return;
+    launchpad_release_all_inputs();
+    current_mode = mode;
+    launchpad_set_led_mode(current_mode);
+    display_ui_set_active_mode(current_mode);
+    ESP_LOGI(TAG, "==================================================");
+    ESP_LOGI(TAG, "🔀 ĐÃ CHUYỂN SANG MODE: %s", mode_names[current_mode]);
+    ESP_LOGI(TAG, "==================================================");
+}
+
+launchpad_mode_t launchpad_core_get_mode(void) {
+    return current_mode;
+}
+
+static void on_ui_mode_change_requested(uint8_t mode) {
+    launchpad_core_set_mode((launchpad_mode_t)mode);
 }
 
 static void launchpad_flash_led_bond_clear(void) {
@@ -90,24 +113,6 @@ static void launchpad_flash_led_bond_clear(void) {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     launchpad_set_led_mode(current_mode);
-}
-
-static void launchpad_release_all_inputs(void) {
-    if (ble_hid_is_connected()) {
-        switch (current_mode) {
-            case LP_MODE_GAMEPAD:
-                ble_hid_send_xbox_gamepad(32768, 32768, 32768, 32768, 0, 0, 0, GAMEPAD_DPAD_CENTER);
-                break;
-            case LP_MODE_KEYBOARD:
-                ble_hid_send_keyboard(0, 0);
-                break;
-            case LP_MODE_MOUSE:
-                ble_hid_send_mouse(0, 0, 0, 0);
-                break;
-            default:
-                break;
-        }
-    }
 }
 
 void launchpad_core_trigger_pad(uint8_t pad_index, bool pressed) {
@@ -134,23 +139,15 @@ void launchpad_core_trigger_pad(uint8_t pad_index, bool pressed) {
                     }
                     break;
 
-                case LP_MODE_KEYBOARD:
+                case LP_MODE_KB_MOUSE:
                     if (pressed) {
                         ble_hid_send_keyboard(0, HID_KEY_SPACE);
-                        ESP_LOGI(TAG, "⌨️ [KEYBOARD] BOOT Pressed -> Gửi phím SPACE (Phím Cách)");
+                        ble_hid_send_mouse(MOUSE_BUTTON_LEFT, 0, 0, 0);
+                        ESP_LOGI(TAG, "⌨️🖱️ [KB/MOUSE] BOOT Pressed -> Phím Space + Click Chuột Trái");
                     } else {
                         ble_hid_send_keyboard(0, 0);
-                        ESP_LOGI(TAG, "⌨️ [KEYBOARD] BOOT Released -> Nhả phím (Key Released)");
-                    }
-                    break;
-
-                case LP_MODE_MOUSE:
-                    if (pressed) {
-                        ble_hid_send_mouse(MOUSE_BUTTON_LEFT, 0, 0, 0);
-                        ESP_LOGI(TAG, "🖱️ [MOUSE] BOOT Pressed -> Click Chuột Trái (Left Click Down)");
-                    } else {
                         ble_hid_send_mouse(0, 0, 0, 0);
-                        ESP_LOGI(TAG, "🖱️ [MOUSE] BOOT Released -> Nhả Chuột Trái (Left Click Released)");
+                        ESP_LOGI(TAG, "⌨️🖱️ [KB/MOUSE] BOOT Released -> Nhả phím & chuột");
                     }
                     break;
 
@@ -210,13 +207,7 @@ static void launchpad_button_task(void *pvParameters) {
             // Check 2 seconds: Switch Mode
             if (!mode_switched && duration >= MODE_SWITCH_TICKS) {
                 mode_switched = true;
-                launchpad_release_all_inputs();
-
-                current_mode = (current_mode + 1) % LP_MODE_MAX;
-                launchpad_set_led_mode(current_mode);
-                ESP_LOGI(TAG, "==================================================");
-                ESP_LOGI(TAG, "🔀 ĐÃ GIỮ 2 GIÂY -> CHUYỂN SANG MODE: %s", mode_names[current_mode]);
-                ESP_LOGI(TAG, "==================================================");
+                launchpad_core_set_mode((current_mode + 1) % LP_MODE_MAX);
             }
 
             // Check 6 seconds: Clear Bonds
@@ -315,6 +306,10 @@ esp_err_t launchpad_core_init(void) {
 
     // 4. Đăng ký callback theo dõi trạng thái kết nối BLE để cập nhật ngay vạch sóng
     ble_hid_register_conn_status_cb(on_ble_connection_changed);
+
+    // 5. Đăng ký callback khi người dùng chọn đổi Mode trên màn hình UI
+    display_ui_register_mode_change_cb(on_ui_mode_change_requested);
+    display_ui_set_active_mode(current_mode);
 
     xTaskCreate(launchpad_button_task, "lp_btn_task", 3072, NULL, 10, NULL);
     return ESP_OK;
