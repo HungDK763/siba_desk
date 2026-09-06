@@ -30,6 +30,11 @@ esp_err_t display_ui_set_backlight(uint8_t brightness_pct);
  */
 esp_err_t display_ui_toggle_screen(void);
 
+/**
+ * @brief Cập nhật trạng thái kết nối BLE (hiển thị cột sóng hoặc dấu x đỏ ngay lập tức)
+ */
+esp_err_t display_ui_set_ble_connected(bool connected);
+
 #ifdef __cplusplus
 }
 #endif

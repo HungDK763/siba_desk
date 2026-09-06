@@ -40,6 +40,7 @@ typedef struct {
     char date_vn[32];                // Ngày tháng Việt Nam (ví dụ: Th 7 6 thg 9)
     char gemini_reset[16];           // Đếm ngược reset Gemini 5h (ví dụ: 04:45)
     char claude_reset[16];           // Đếm ngược reset Claude 5h (ví dụ: 04:59)
+    uint32_t epoch_sec;              // Epoch timestamp UTC (giây)
     uint8_t antigrav_quota_percent;  // Quota Gemini 5h còn lại (0 - 100%)
     uint8_t gemini_weekly_percent;   // Quota Gemini tuần (0 - 100%)
     uint8_t claude_5h_percent;       // Quota Claude 5h (0 - 100%)

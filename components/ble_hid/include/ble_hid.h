@@ -168,6 +168,14 @@ typedef void (*ble_pc_sync_rx_cb_t)(const uint8_t *data, size_t len);
  */
 void ble_hid_register_pc_sync_cb(ble_pc_sync_rx_cb_t cb);
 
+// Callback type for BLE connection state changes
+typedef void (*ble_connection_status_cb_t)(bool connected);
+
+/**
+ * @brief Register callback for BLE connection state change (connect / disconnect)
+ */
+void ble_hid_register_conn_status_cb(ble_connection_status_cb_t cb);
+
 #ifdef __cplusplus
 }
 #endif

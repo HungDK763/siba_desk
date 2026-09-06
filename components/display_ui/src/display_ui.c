@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <sys/time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -86,6 +87,15 @@ static lv_obj_t *bar_home_gemini = NULL;
 static lv_obj_t *lbl_home_gem_val = NULL;
 static lv_obj_t *bar_home_claude = NULL;
 static lv_obj_t *lbl_home_cld_val = NULL;
+
+// Autonomous Internal Timekeeping & BLE State
+static bool s_ble_connected = false;
+static bool s_clock_synced = false;
+static uint32_t s_last_packet_time_ms = 0;
+static int32_t s_gemini_reset_sec = -1;
+static int32_t s_claude_reset_sec = -1;
+static char s_last_rendered_hm[8] = "";
+static int s_current_signal_level = -1;
 
 esp_err_t display_ui_set_backlight(uint8_t brightness_pct) {
     gpio_set_level(PIN_NUM_BL, brightness_pct > 0 ? 1 : 0);
@@ -208,6 +218,9 @@ static lv_obj_t* create_signal_widget(lv_obj_t *parent, lv_obj_t **b1, lv_obj_t 
 
 // Update signal bars
 static void set_signal_level(int level) {
+    if (s_current_signal_level == level) return;
+    s_current_signal_level = level;
+
     lv_color_t c_on = lv_palette_main(LV_PALETTE_GREEN);
     lv_color_t c_off = lv_color_hex(0x475569);
 
@@ -232,6 +245,77 @@ static void set_signal_level(int level) {
             lv_obj_set_style_bg_color(b2_arr[s], level >= 2 ? c_on : c_off, 0);
             lv_obj_set_style_bg_color(b3_arr[s], level >= 3 ? c_on : c_off, 0);
             lv_obj_set_style_bg_color(b4_arr[s], level >= 4 ? c_on : c_off, 0);
+        }
+    }
+}
+
+// Cập nhật trạng thái BLE ngay tức thì (từ callback ngắt kết nối BLE)
+esp_err_t display_ui_set_ble_connected(bool connected) {
+    s_ble_connected = connected;
+    if (!connected) {
+        s_last_packet_time_ms = 0;
+    }
+    if (lvgl_lock(100)) {
+        set_signal_level(connected ? 4 : 0);
+        lvgl_unlock();
+    }
+    return ESP_OK;
+}
+
+// Timer định kỳ 1 giây: Tự động đếm giây và cập nhật đồng hồ trên màn hình
+static void clock_tick_timer_cb(lv_timer_t *timer) {
+    // 1. Kiểm tra timeout nhận dữ liệu BLE (nếu mất BLE hoặc quá 25s không có gói tin thì báo disconnect)
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    if (!s_ble_connected || (s_last_packet_time_ms > 0 && (now_ms - s_last_packet_time_ms) > 25000)) {
+        set_signal_level(0);
+    }
+
+    // 2. Nếu đã đồng bộ thời gian từ PC ít nhất 1 lần, ESP32 tự động tính toán và cập nhật giao diện
+    if (s_clock_synced) {
+        time_t now = time(NULL);
+        struct tm ti;
+        localtime_r(&now, &ti);
+
+        // Header trên Dashboard Console: HH:MM:SS
+        char time_hms[16];
+        snprintf(time_hms, sizeof(time_hms), "%02d:%02d:%02d", ti.tm_hour, ti.tm_min, ti.tm_sec);
+        if (lbl_clock) {
+            lv_label_set_text(lbl_clock, time_hms);
+        }
+
+        // Màn hình Home: Đồng hồ số to HH:MM (chỉ cập nhật khi đổi phút để tiết kiệm CPU & tránh redraw lớn)
+        char time_hm[8];
+        snprintf(time_hm, sizeof(time_hm), "%02d:%02d", ti.tm_hour, ti.tm_min);
+        if (strcmp(s_last_rendered_hm, time_hm) != 0) {
+            strncpy(s_last_rendered_hm, time_hm, sizeof(s_last_rendered_hm) - 1);
+            if (lbl_home_big_clock) {
+                lv_label_set_text(lbl_home_big_clock, time_hm);
+            }
+        }
+
+        // Màn hình Home: Cập nhật thứ ngày tháng
+        static const char *weekday_vn_map[7] = {
+            "CN", "Th 2", "Th 3", "Th 4", "Th 5", "Th 6", "Th 7"
+        };
+        char date_buf[32];
+        snprintf(date_buf, sizeof(date_buf), "%s,  %d thg %d",
+                 weekday_vn_map[ti.tm_wday % 7], ti.tm_mday, ti.tm_mon + 1);
+        if (lbl_home_calendar) {
+            lv_label_set_text(lbl_home_calendar, date_buf);
+        }
+
+        // 3. Tự động đếm lùi thời gian reset Quota 5h
+        if (s_gemini_reset_sec > 0) {
+            s_gemini_reset_sec--;
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%02d:%02d", (int)(s_gemini_reset_sec / 3600), (int)((s_gemini_reset_sec % 3600) / 60));
+            if (lbl_gem_sub) lv_label_set_text(lbl_gem_sub, buf);
+        }
+        if (s_claude_reset_sec > 0) {
+            s_claude_reset_sec--;
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%02d:%02d", (int)(s_claude_reset_sec / 3600), (int)((s_claude_reset_sec % 3600) / 60));
+            if (lbl_cld_sub) lv_label_set_text(lbl_cld_sub, buf);
         }
     }
 }
@@ -577,6 +661,49 @@ static void build_home_screen(void) {
 esp_err_t display_ui_update_quota(const pc_quota_packet_t *quota) {
     if (!quota) return ESP_ERR_INVALID_ARG;
 
+    s_last_packet_time_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    s_ble_connected = true;
+
+    // 1. Đồng bộ thời gian nội tại của ESP32 (Sử dụng timestamp epoch hoặc parse HH:MM:SS)
+    if (quota->epoch_sec > 1000000000) {
+        struct timeval tv = { .tv_sec = quota->epoch_sec, .tv_usec = 0 };
+        settimeofday(&tv, NULL);
+        s_clock_synced = true;
+    } else if (quota->time_vn[0] != '\0') {
+        int h = 0, m = 0, s = 0;
+        if (sscanf(quota->time_vn, "%d:%d:%d", &h, &m, &s) >= 2) {
+            time_t now = time(NULL);
+            struct tm ti;
+            localtime_r(&now, &ti);
+            if (ti.tm_year < 120) {
+                ti.tm_year = 126; // 2026
+                ti.tm_mon = 8;    // Tháng 9 (0-indexed: 8)
+                ti.tm_mday = 6;
+            }
+            ti.tm_hour = h;
+            ti.tm_min = m;
+            ti.tm_sec = s;
+            time_t new_now = mktime(&ti);
+            struct timeval tv = { .tv_sec = new_now, .tv_usec = 0 };
+            settimeofday(&tv, NULL);
+            s_clock_synced = true;
+        }
+    }
+
+    // Parse thời gian đếm lùi reset Quota 5h
+    if (quota->gemini_reset[0] != '\0') {
+        int rh = 0, rm = 0;
+        if (sscanf(quota->gemini_reset, "%d:%d", &rh, &rm) == 2) {
+            s_gemini_reset_sec = rh * 3600 + rm * 60;
+        }
+    }
+    if (quota->claude_reset[0] != '\0') {
+        int rh = 0, rm = 0;
+        if (sscanf(quota->claude_reset, "%d:%d", &rh, &rm) == 2) {
+            s_claude_reset_sec = rh * 3600 + rm * 60;
+        }
+    }
+
     if (lvgl_lock(100)) {
         char buf[64];
 
@@ -593,6 +720,7 @@ esp_err_t display_ui_update_quota(const pc_quota_packet_t *quota) {
                     strncpy(time_hm, quota->time_vn, sizeof(time_hm) - 1);
                     time_hm[sizeof(time_hm) - 1] = '\0';
                 }
+                strncpy(s_last_rendered_hm, time_hm, sizeof(s_last_rendered_hm) - 1);
                 lv_label_set_text(lbl_home_big_clock, time_hm);
             }
         }
@@ -667,6 +795,10 @@ esp_err_t display_ui_init(void) {
     ESP_LOGI(TAG, "=================================================");
     ESP_LOGI(TAG, "  DESK CONSOLE: MULTI-SCREEN (DASHBOARD + HOME)  ");
     ESP_LOGI(TAG, "=================================================");
+
+    // 0. Cấu hình múi giờ Việt Nam (UTC+7) cho POSIX time
+    setenv("TZ", "ICT-7", 1);
+    tzset();
 
     // 1. Backlight ON
     gpio_config_t bk_conf = {
@@ -765,6 +897,9 @@ esp_err_t display_ui_init(void) {
         // 11. Cảm ứng XPT2046
         touch_xpt2046_init();
         touch_xpt2046_register_lvgl();
+
+        // 12. Tạo timer 1s để ESP32 tự đếm giây và duy trì đồng hồ khi ngắt kết nối
+        lv_timer_create(clock_tick_timer_cb, 1000, NULL);
 
         lvgl_unlock();
     }

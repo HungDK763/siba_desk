@@ -111,6 +111,13 @@ esp_err_t pc_sync_process_packet(const uint8_t *raw_data, size_t len) {
         latest_quota.claude_reset[sizeof(latest_quota.claude_reset) - 1] = '\0';
     }
 
+    // Parse UTC epoch timestamp (ts / epoch)
+    cJSON *item_ts = cJSON_GetObjectItem(root, "ts");
+    if (!item_ts) item_ts = cJSON_GetObjectItem(root, "epoch");
+    if (item_ts && cJSON_IsNumber(item_ts)) {
+        latest_quota.epoch_sec = (uint32_t)item_ts->valueint;
+    }
+
     // Parse Gemini 5h quota % (primary quota)
     cJSON *item_quota = cJSON_GetObjectItem(root, "quota");
     if (!item_quota) item_quota = cJSON_GetObjectItem(root, "g_5h");

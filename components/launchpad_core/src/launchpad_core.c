@@ -298,6 +298,11 @@ static void on_ble_raw_data_received(const uint8_t *data, size_t len) {
     pc_sync_process_packet(data, len);
 }
 
+static void on_ble_connection_changed(bool connected) {
+    ESP_LOGI(TAG, "📶 BLE Connection State: %s", connected ? "CONNECTED" : "DISCONNECTED");
+    display_ui_set_ble_connected(connected);
+}
+
 esp_err_t launchpad_core_init(void) {
     // 1. Khởi tạo tầng giao tiếp PC Sync với callback xử lý dữ liệu
     pc_sync_init(on_pc_quota_updated);
@@ -307,6 +312,9 @@ esp_err_t launchpad_core_init(void) {
 
     // 3. Khởi tạo màn hình TFT 2.8" SPI và engine đồ họa LVGL v8
     display_ui_init();
+
+    // 4. Đăng ký callback theo dõi trạng thái kết nối BLE để cập nhật ngay vạch sóng
+    ble_hid_register_conn_status_cb(on_ble_connection_changed);
 
     xTaskCreate(launchpad_button_task, "lp_btn_task", 3072, NULL, 10, NULL);
     return ESP_OK;

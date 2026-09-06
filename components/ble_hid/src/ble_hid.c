@@ -111,6 +111,7 @@ static uint16_t dev_info_handle_table[DEV_INFO_IDX_MAX];
 static uint16_t hid_handle_table[HID_IDX_MAX];
 static uint16_t pc_sync_handle_table[PC_SYNC_IDX_MAX];
 static ble_pc_sync_rx_cb_t s_pc_sync_cb = NULL;
+static ble_connection_status_cb_t s_conn_status_cb = NULL;
 static uint16_t gatts_if_for_app = ESP_GATT_IF_NONE;
 static uint16_t conn_id = 0;
 static bool is_connected = false;
@@ -470,6 +471,9 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
                      conn_id,
                      current_remote_bda[0], current_remote_bda[1], current_remote_bda[2],
                      current_remote_bda[3], current_remote_bda[4], current_remote_bda[5]);
+            if (s_conn_status_cb) {
+                s_conn_status_cb(true);
+            }
             break;
 
         case ESP_GATTS_DISCONNECT_EVT:
@@ -477,6 +481,9 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
             memset(current_remote_bda, 0, sizeof(esp_bd_addr_t));
             ESP_LOGI(TAG, "BLE Host Disconnected. Restarting Advertising...");
             esp_ble_gap_start_advertising(&adv_params);
+            if (s_conn_status_cb) {
+                s_conn_status_cb(false);
+            }
             break;
 
         case ESP_GATTS_WRITE_EVT:
@@ -692,4 +699,9 @@ esp_err_t ble_hid_send_consumer(uint8_t consumer_bitmask) {
 void ble_hid_register_pc_sync_cb(ble_pc_sync_rx_cb_t cb) {
     s_pc_sync_cb = cb;
 }
+
+void ble_hid_register_conn_status_cb(ble_connection_status_cb_t cb) {
+    s_conn_status_cb = cb;
+}
+
 

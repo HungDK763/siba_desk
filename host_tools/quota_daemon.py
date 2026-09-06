@@ -467,6 +467,7 @@ async def run_daemon_loop(args):
                 "model": stats["model_name"],
                 "time": vn_time,
                 "date": vn_date,
+                "ts": int(time.time() + g_cached_time["offset"]),
                 "quota": g_5h,
                 "g_w": g_w,
                 "c_5h": c_5h,
