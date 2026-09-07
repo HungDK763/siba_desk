@@ -1180,7 +1180,7 @@ static void build_home_screen(void) {
     lv_label_set_text(lbl_home_big_clock, "21:49");
     lv_obj_set_style_text_color(lbl_home_big_clock, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_home_big_clock, &font_sf_pro_rounded_60, 0);
-    lv_obj_align(lbl_home_big_clock, LV_ALIGN_TOP_RIGHT, -20, 68);
+    lv_obj_align(lbl_home_big_clock, LV_ALIGN_TOP_RIGHT, -16, 62);
 
     // 5. DATE SUBTITLE (Nằm ngay trên đồng hồ, căn phải)
     lbl_home_calendar = lv_label_create(scr_home);
@@ -1252,10 +1252,10 @@ static void build_home_screen(void) {
     lv_obj_set_style_text_font(lbl_home_cld_val, &lv_font_montserrat_14, 0);
     lv_obj_set_pos(lbl_home_cld_val, 268, 10);
 
-    // 7. BONGO SHIBA (Chú cún gõ phím trên mép thanh Quota: 3s gõ + 2s nghỉ)
+    // 7. BONGO SHIBA (Chú cún gõ phím trên mép thanh Quota: 104x78 px, 3s gõ + 2s nghỉ)
     img_bongo_shiba = lv_img_create(scr_home);
     lv_img_set_src(img_bongo_shiba, &img_bongo_tap_l);
-    lv_obj_set_pos(img_bongo_shiba, 66, 150);
+    lv_obj_set_pos(img_bongo_shiba, 52, 118);
     lv_obj_clear_flag(img_bongo_shiba, LV_OBJ_FLAG_CLICKABLE);
 }
 
