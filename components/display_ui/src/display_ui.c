@@ -29,6 +29,7 @@
 #include "ios_fonts.h"
 #include "mode_icons.h"
 #include "shiba_sprite.h"
+#include "bongo_shiba_sprite.h"
 #include "ble_hid.h"
 
 static const char *TAG = "DISP_UI";
@@ -86,6 +87,10 @@ static int s_shiba_dir = 1;       // 1 = moving right, -1 = moving left
 static int s_shiba_frame = 0;     // 0..3
 static int s_shiba_pause = 0;     // Idle pause countdown ticks
 static int s_shiba_hop_ticks = 0; // Happy hop animation ticks when tapped
+
+// Bongo Shiba Animation (Screen 2 Home: 3s gõ phím + 2s nghỉ ngơi)
+static lv_obj_t *img_bongo_shiba = NULL;
+static uint8_t s_bongo_tick = 0;
 
 // Signal Bars (Screen 1 & Screen 2 & Screen 3A & Screen 3B & Screen 3C)
 static lv_obj_t *bar_sig_1 = NULL;
@@ -864,6 +869,30 @@ static void shiba_anim_timer_cb(lv_timer_t *timer) {
     lv_obj_set_pos(img_shiba, s_shiba_x, y_pos);
 }
 
+static void bongo_shiba_anim_timer_cb(lv_timer_t *timer) {
+    if (!img_bongo_shiba || lv_scr_act() != scr_home) {
+        return;
+    }
+
+    // Chu kỳ 5040ms: 3000ms gõ phím (ticks 0..24, mỗi tick 120ms) + 2040ms nghỉ ngơi (ticks 25..41)
+    s_bongo_tick++;
+    if (s_bongo_tick >= 42) {
+        s_bongo_tick = 0;
+    }
+
+    if (s_bongo_tick < 25) {
+        // Giai đoạn 3s gõ phím liên tục: Chân trái và chân phải so le đập cực nhanh
+        if (s_bongo_tick % 2 == 0) {
+            lv_img_set_src(img_bongo_shiba, &img_bongo_tap_l);
+        } else {
+            lv_img_set_src(img_bongo_shiba, &img_bongo_tap_r);
+        }
+    } else {
+        // Giai đoạn 2s nghỉ ngơi: 2 chân đặt yên trên thanh Quota, mắt cười tít ^_^
+        lv_img_set_src(img_bongo_shiba, &img_bongo_rest);
+    }
+}
+
 // =========================================================================
 // SCREEN 1: Quota Dashboard Console
 // =========================================================================
@@ -1146,82 +1175,88 @@ static void build_home_screen(void) {
     // Cập nhật trạng thái viền/nền theo Mode đang kích hoạt
     display_ui_set_active_mode(s_active_mode);
 
-    // 4. GIANT iPHONE CLOCK (Hạ thấp xuống chính giữa màn hình, dịch sang phải 40px)
+    // 4. GIANT iPHONE CLOCK & DATE (Bố trí góc trên bên phải tương tự ảnh concept)
     lbl_home_big_clock = lv_label_create(scr_home);
     lv_label_set_text(lbl_home_big_clock, "21:49");
     lv_obj_set_style_text_color(lbl_home_big_clock, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_home_big_clock, &font_sf_pro_rounded_60, 0);
-    lv_obj_align(lbl_home_big_clock, LV_ALIGN_CENTER, 40, -10);
+    lv_obj_align(lbl_home_big_clock, LV_ALIGN_TOP_RIGHT, -20, 68);
 
-    // 5. DATE SUBTITLE (Thứ cách ngày tháng, đặt cao hơn 10px, đi theo đồng hồ +40px)
+    // 5. DATE SUBTITLE (Nằm ngay trên đồng hồ, căn phải)
     lbl_home_calendar = lv_label_create(scr_home);
     lv_label_set_text(lbl_home_calendar, "CN,  6 thg 9");
     lv_obj_set_style_text_color(lbl_home_calendar, lv_color_hex(0xE2E8F0), 0);
     lv_obj_set_style_text_font(lbl_home_calendar, &font_sf_pro_rounded_16, 0);
-    lv_obj_align_to(lbl_home_calendar, lbl_home_big_clock, LV_ALIGN_OUT_TOP_MID, 0, -18);
+    lv_obj_align_to(lbl_home_calendar, lbl_home_big_clock, LV_ALIGN_OUT_TOP_RIGHT, 0, -4);
 
-    // 6. MINI QUOTA WIDGET (Thẻ kính mờ nổi trên vòm khí quyển Trái Đất)
+    // 6. MINI QUOTA WIDGET (Thu gọn độ cao xuống 36px để tạo khoảng trống thoáng cho cún)
     lv_obj_t *panel_mini = lv_obj_create(scr_home);
-    lv_obj_set_size(panel_mini, 304, 52);
+    lv_obj_set_size(panel_mini, 304, 36);
     lv_obj_set_style_bg_color(panel_mini, lv_color_hex(0x0B1329), 0);
     lv_obj_set_style_bg_opa(panel_mini, LV_OPA_80, 0);
     lv_obj_set_style_border_color(panel_mini, lv_color_hex(0x334155), 0);
     lv_obj_set_style_border_width(panel_mini, 1, 0);
-    lv_obj_set_style_radius(panel_mini, 12, 0);
+    lv_obj_set_style_radius(panel_mini, 10, 0);
     lv_obj_set_style_pad_all(panel_mini, 0, 0);
     lv_obj_align(panel_mini, LV_ALIGN_BOTTOM_MID, 0, -8);
     lv_obj_clear_flag(panel_mini, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Gemini Mini
+    // Gemini Mini (Căn thẳng hàng trên 1 dòng)
     lv_obj_t *lbl_mg = lv_label_create(panel_mini);
     lv_label_set_text(lbl_mg, "GEMINI");
     lv_obj_set_style_text_color(lbl_mg, lv_color_hex(0x38BDF8), 0);
     lv_obj_set_style_text_font(lbl_mg, &lv_font_montserrat_14, 0);
-    lv_obj_set_pos(lbl_mg, 12, 6);
+    lv_obj_set_pos(lbl_mg, 10, 10);
 
     bar_home_gemini = lv_bar_create(panel_mini);
-    lv_obj_set_size(bar_home_gemini, 88, 8);
+    lv_obj_set_size(bar_home_gemini, 52, 6);
     lv_bar_set_range(bar_home_gemini, 0, 100);
     lv_bar_set_value(bar_home_gemini, 90, LV_ANIM_OFF);
     lv_obj_set_style_bg_color(bar_home_gemini, lv_color_hex(0x1E293B), LV_PART_MAIN);
     lv_obj_set_style_bg_color(bar_home_gemini, lv_color_hex(0x38BDF8), LV_PART_INDICATOR);
     lv_obj_set_style_radius(bar_home_gemini, 3, 0);
-    lv_obj_set_pos(bar_home_gemini, 12, 28);
+    lv_obj_set_pos(bar_home_gemini, 66, 15);
 
     lbl_home_gem_val = lv_label_create(panel_mini);
     lv_label_set_text(lbl_home_gem_val, "90%");
     lv_obj_set_style_text_color(lbl_home_gem_val, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_home_gem_val, &lv_font_montserrat_14, 0);
-    lv_obj_set_pos(lbl_home_gem_val, 106, 24);
+    lv_obj_set_pos(lbl_home_gem_val, 122, 10);
 
     // Vách ngăn giữa
     lv_obj_t *sep = lv_obj_create(panel_mini);
-    lv_obj_set_size(sep, 1, 34);
-    lv_obj_set_pos(sep, 152, 9);
+    lv_obj_set_size(sep, 1, 22);
+    lv_obj_set_pos(sep, 152, 7);
     lv_obj_set_style_bg_color(sep, lv_color_hex(0x334155), 0);
     lv_obj_set_style_border_width(sep, 0, 0);
 
-    // Claude Mini
+    // Claude Mini (Căn thẳng hàng trên 1 dòng)
     lv_obj_t *lbl_mc = lv_label_create(panel_mini);
     lv_label_set_text(lbl_mc, "CLAUDE");
     lv_obj_set_style_text_color(lbl_mc, lv_color_hex(0xF97316), 0);
     lv_obj_set_style_text_font(lbl_mc, &lv_font_montserrat_14, 0);
-    lv_obj_set_pos(lbl_mc, 162, 6);
+    lv_obj_set_pos(lbl_mc, 158, 10);
 
     bar_home_claude = lv_bar_create(panel_mini);
-    lv_obj_set_size(bar_home_claude, 88, 8);
+    lv_obj_set_size(bar_home_claude, 46, 6);
     lv_bar_set_range(bar_home_claude, 0, 100);
     lv_bar_set_value(bar_home_claude, 100, LV_ANIM_OFF);
     lv_obj_set_style_bg_color(bar_home_claude, lv_color_hex(0x1E293B), LV_PART_MAIN);
     lv_obj_set_style_bg_color(bar_home_claude, lv_color_hex(0xF97316), LV_PART_INDICATOR);
     lv_obj_set_style_radius(bar_home_claude, 3, 0);
-    lv_obj_set_pos(bar_home_claude, 162, 28);
+    lv_obj_set_pos(bar_home_claude, 218, 15);
 
     lbl_home_cld_val = lv_label_create(panel_mini);
     lv_label_set_text(lbl_home_cld_val, "100%");
     lv_obj_set_style_text_color(lbl_home_cld_val, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_home_cld_val, &lv_font_montserrat_14, 0);
-    lv_obj_set_pos(lbl_home_cld_val, 256, 24);
+    lv_obj_set_pos(lbl_home_cld_val, 268, 10);
+
+    // 7. BONGO SHIBA (Chú cún gõ phím trên mép thanh Quota: 3s gõ + 2s nghỉ)
+    img_bongo_shiba = lv_img_create(scr_home);
+    lv_img_set_src(img_bongo_shiba, &img_bongo_tap_l);
+    lv_obj_set_pos(img_bongo_shiba, 66, 150);
+    lv_obj_clear_flag(img_bongo_shiba, LV_OBJ_FLAG_CLICKABLE);
 }
 
 // =========================================================================
@@ -1847,6 +1882,8 @@ esp_err_t display_ui_init(void) {
         lv_timer_create(clock_tick_timer_cb, 1000, NULL);
         // 13. Timer hoạt ảnh chú cún Shiba Pixel Pet (110ms)
         lv_timer_create(shiba_anim_timer_cb, 110, NULL);
+        // 14. Timer hoạt ảnh chú cún Bongo Shiba gõ phím trên màn hình Home (120ms)
+        lv_timer_create(bongo_shiba_anim_timer_cb, 120, NULL);
 
         lvgl_unlock();
     }
