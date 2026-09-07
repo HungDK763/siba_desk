@@ -19,6 +19,8 @@
 #include "driver/spi_master.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "nvs_flash.h"
+#include "nvs.h"
 #include "lvgl.h"
 
 #include "display_ui.h"
@@ -26,6 +28,7 @@
 #include "earth_wallpaper.h"
 #include "ios_fonts.h"
 #include "mode_icons.h"
+#include "shiba_sprite.h"
 #include "ble_hid.h"
 
 static const char *TAG = "DISP_UI";
@@ -72,6 +75,17 @@ static lv_obj_t *lbl_cld_sub = NULL;
 static lv_obj_t *bar_claude_w = NULL;
 
 static lv_obj_t *lbl_system = NULL;
+static lv_obj_t *btn_paw = NULL;
+static lv_obj_t *img_paw = NULL;
+static lv_obj_t *img_shiba = NULL;
+
+// Shiba Pet Animation & NVS Persistence State
+static bool s_pet_enabled = true;
+static int s_shiba_x = 80;
+static int s_shiba_dir = 1;       // 1 = moving right, -1 = moving left
+static int s_shiba_frame = 0;     // 0..3
+static int s_shiba_pause = 0;     // Idle pause countdown ticks
+static int s_shiba_hop_ticks = 0; // Happy hop animation ticks when tapped
 
 // Signal Bars (Screen 1 & Screen 2 & Screen 3A & Screen 3B & Screen 3C)
 static lv_obj_t *bar_sig_1 = NULL;
@@ -648,7 +662,7 @@ static void nav_back_to_kb_mouse_cb(lv_event_t *e) {
     }
 }
 
-static void clr_ta_action_cb(lv_event_t *e) {
+static void __attribute__((unused)) clr_ta_action_cb(lv_event_t *e) {
     if (ta_full_kb) {
         lv_textarea_set_text(ta_full_kb, "");
     }
@@ -746,6 +760,111 @@ static lv_obj_t* create_control_btn(lv_obj_t *parent, lv_coord_t x, lv_coord_t y
 }
 
 // =========================================================================
+// Shiba Pet & Theme Switcher (NVS Persistence & Animation)
+// =========================================================================
+static void load_pet_setting(void) {
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open("desk_cfg", NVS_READONLY, &my_handle);
+    if (err == ESP_OK) {
+        uint8_t val = 1;
+        if (nvs_get_u8(my_handle, "pet_en", &val) == ESP_OK) {
+            s_pet_enabled = (val != 0);
+        }
+        nvs_close(my_handle);
+    }
+}
+
+static void save_pet_setting(bool enabled) {
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open("desk_cfg", NVS_READWRITE, &my_handle);
+    if (err == ESP_OK) {
+        nvs_set_u8(my_handle, "pet_en", enabled ? 1 : 0);
+        nvs_commit(my_handle);
+        nvs_close(my_handle);
+    }
+}
+
+static void update_paw_button_state(void) {
+    if (!btn_paw || !img_paw) return;
+    if (s_pet_enabled) {
+        lv_obj_set_style_bg_color(btn_paw, lv_color_hex(0x1E3A5F), 0);
+        lv_obj_set_style_border_color(btn_paw, lv_color_hex(0x38BDF8), 0);
+        lv_obj_set_style_border_width(btn_paw, 1, 0);
+        lv_obj_set_style_img_recolor_opa(img_paw, LV_OPA_TRANSP, 0);
+    } else {
+        lv_obj_set_style_bg_color(btn_paw, lv_color_hex(0x1E293B), 0);
+        lv_obj_set_style_border_color(btn_paw, lv_color_hex(0x334155), 0);
+        lv_obj_set_style_border_width(btn_paw, 1, 0);
+        lv_obj_set_style_img_recolor(img_paw, lv_color_hex(0x64748B), 0);
+        lv_obj_set_style_img_recolor_opa(img_paw, LV_OPA_COVER, 0);
+    }
+}
+
+static void btn_paw_cb(lv_event_t *e) {
+    s_pet_enabled = !s_pet_enabled;
+    save_pet_setting(s_pet_enabled);
+    update_paw_button_state();
+    if (img_shiba) {
+        if (s_pet_enabled) {
+            lv_obj_clear_flag(img_shiba, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(img_shiba, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+}
+
+static void shiba_click_cb(lv_event_t *e) {
+    s_shiba_hop_ticks = 8;
+    s_shiba_pause = 0;
+}
+
+static void shiba_anim_timer_cb(lv_timer_t *timer) {
+    if (!s_pet_enabled || !img_shiba || lv_scr_act() != scr_console) {
+        return;
+    }
+
+    int y_pos = 4;
+
+    if (s_shiba_hop_ticks > 0) {
+        s_shiba_hop_ticks--;
+        if (s_shiba_hop_ticks % 2 == 1) {
+            y_pos = 1;
+        }
+        s_shiba_frame = (s_shiba_frame + 1) % 4;
+    } else if (s_shiba_pause > 0) {
+        s_shiba_pause--;
+        if (s_shiba_pause % 4 == 0) {
+            s_shiba_frame = (s_shiba_frame == 0) ? 1 : 0;
+        }
+    } else {
+        s_shiba_frame = (s_shiba_frame + 1) % 4;
+        s_shiba_x += s_shiba_dir * 2;
+
+        const int SHIBA_MIN_X = 62;
+        const int SHIBA_MAX_X = 144;
+
+        if (s_shiba_x >= SHIBA_MAX_X) {
+            s_shiba_x = SHIBA_MAX_X;
+            s_shiba_dir = -1;
+            s_shiba_pause = 16;
+            s_shiba_frame = 0;
+        } else if (s_shiba_x <= SHIBA_MIN_X) {
+            s_shiba_x = SHIBA_MIN_X;
+            s_shiba_dir = 1;
+            s_shiba_pause = 16;
+            s_shiba_frame = 0;
+        }
+    }
+
+    const lv_img_dsc_t *sprite = (s_shiba_dir >= 0) 
+                                 ? shiba_anim_right[s_shiba_frame] 
+                                 : shiba_anim_left[s_shiba_frame];
+
+    lv_img_set_src(img_shiba, sprite);
+    lv_obj_set_pos(img_shiba, s_shiba_x, y_pos);
+}
+
+// =========================================================================
 // SCREEN 1: Quota Dashboard Console
 // =========================================================================
 static void build_console_screen(void) {
@@ -753,7 +872,7 @@ static void build_console_screen(void) {
     lv_obj_set_style_bg_color(scr_console, lv_color_hex(0x0F172A), 0);
     lv_obj_set_style_bg_opa(scr_console, LV_OPA_COVER, 0);
 
-    // 1. TOP BAR (Height: 30px)
+    // 1. TOP BAR (Height: 32px)
     lv_obj_t *top_bar = lv_obj_create(scr_console);
     lv_obj_set_pos(top_bar, 0, 0);
     lv_obj_set_size(top_bar, 320, 32);
@@ -771,9 +890,25 @@ static void build_console_screen(void) {
     lv_obj_set_style_text_font(lbl_clock, &lv_font_montserrat_20, 0);
     lv_obj_align(lbl_clock, LV_ALIGN_LEFT_MID, 12, 0);
 
+    // Paw Toggle Button [🐾]
+    btn_paw = lv_btn_create(top_bar);
+    lv_obj_set_size(btn_paw, 32, 24);
+    lv_obj_align(btn_paw, LV_ALIGN_RIGHT_MID, -44, 0);
+    lv_obj_set_style_radius(btn_paw, 6, 0);
+    lv_obj_set_style_pad_all(btn_paw, 0, 0);
+    lv_obj_set_ext_click_area(btn_paw, 6);
+    lv_obj_add_event_cb(btn_paw, btn_paw_cb, LV_EVENT_CLICKED, NULL);
+
+    img_paw = lv_img_create(btn_paw);
+    lv_img_set_src(img_paw, &img_icon_paw);
+    lv_obj_center(img_paw);
+    lv_obj_clear_flag(img_paw, LV_OBJ_FLAG_CLICKABLE);
+
+    update_paw_button_state();
+
     // BLE Signal Bars (Replaces text indicator)
     lv_obj_t *sig_cont = create_signal_widget(top_bar, &bar_sig_1, &bar_sig_2, &bar_sig_3, &bar_sig_4, &lbl_sig_x);
-    lv_obj_align(sig_cont, LV_ALIGN_RIGHT_MID, -12, 0);
+    lv_obj_align(sig_cont, LV_ALIGN_RIGHT_MID, -10, 0);
 
     // 2. MIDDLE AREA: 2 CARDS (Y = 36, Height = 168)
     // Card Gemini (Left)
@@ -918,6 +1053,17 @@ static void build_console_screen(void) {
     lv_label_set_text(lbl_home_icon, LV_SYMBOL_HOME);
     lv_obj_set_style_text_color(lbl_home_icon, lv_color_hex(0x38BDF8), 0);
     lv_obj_center(lbl_home_icon);
+
+    // Chú cún Shiba Pixel Pet chạy lon ton
+    img_shiba = lv_img_create(bottom_bar);
+    lv_img_set_src(img_shiba, shiba_anim_right[0]);
+    lv_obj_set_pos(img_shiba, s_shiba_x, 4);
+    lv_obj_add_flag(img_shiba, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(img_shiba, 6);
+    lv_obj_add_event_cb(img_shiba, shiba_click_cb, LV_EVENT_CLICKED, NULL);
+    if (!s_pet_enabled) {
+        lv_obj_add_flag(img_shiba, LV_OBJ_FLAG_HIDDEN);
+    }
 
     // Host PC CPU | RAM Telemetry
     lbl_system = lv_label_create(bottom_bar);
@@ -1684,6 +1830,7 @@ esp_err_t display_ui_init(void) {
 
     // 10. Build Screens (Console + Home + Gamepad + Keyboard/Mouse + Full Keyboard)
     if (lvgl_lock(-1)) {
+        load_pet_setting();
         build_console_screen();
         build_home_screen();
         build_gamepad_screen();
@@ -1698,6 +1845,8 @@ esp_err_t display_ui_init(void) {
 
         // 12. Tạo timer 1s để ESP32 tự đếm giây và duy trì đồng hồ khi ngắt kết nối
         lv_timer_create(clock_tick_timer_cb, 1000, NULL);
+        // 13. Timer hoạt ảnh chú cún Shiba Pixel Pet (110ms)
+        lv_timer_create(shiba_anim_timer_cb, 110, NULL);
 
         lvgl_unlock();
     }
