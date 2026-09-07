@@ -823,12 +823,12 @@ static void shiba_anim_timer_cb(lv_timer_t *timer) {
         return;
     }
 
-    int y_pos = 4;
+    int y_pos = 191;
 
     if (s_shiba_hop_ticks > 0) {
         s_shiba_hop_ticks--;
         if (s_shiba_hop_ticks % 2 == 1) {
-            y_pos = 1;
+            y_pos = 188; // Nhảy lên 3px
         }
         s_shiba_frame = (s_shiba_frame + 1) % 4;
     } else if (s_shiba_pause > 0) {
@@ -840,18 +840,18 @@ static void shiba_anim_timer_cb(lv_timer_t *timer) {
         s_shiba_frame = (s_shiba_frame + 1) % 4;
         s_shiba_x += s_shiba_dir * 2;
 
-        const int SHIBA_MIN_X = 62;
-        const int SHIBA_MAX_X = 144;
+        const int SHIBA_MIN_X = 60;
+        const int SHIBA_MAX_X = 132;
 
         if (s_shiba_x >= SHIBA_MAX_X) {
             s_shiba_x = SHIBA_MAX_X;
             s_shiba_dir = -1;
-            s_shiba_pause = 16;
+            s_shiba_pause = 18; // Tạm dừng ~2s
             s_shiba_frame = 0;
         } else if (s_shiba_x <= SHIBA_MIN_X) {
             s_shiba_x = SHIBA_MIN_X;
             s_shiba_dir = 1;
-            s_shiba_pause = 16;
+            s_shiba_pause = 18; // Tạm dừng ~2s
             s_shiba_frame = 0;
         }
     }
@@ -910,11 +910,11 @@ static void build_console_screen(void) {
     lv_obj_t *sig_cont = create_signal_widget(top_bar, &bar_sig_1, &bar_sig_2, &bar_sig_3, &bar_sig_4, &lbl_sig_x);
     lv_obj_align(sig_cont, LV_ALIGN_RIGHT_MID, -10, 0);
 
-    // 2. MIDDLE AREA: 2 CARDS (Y = 36, Height = 168)
+    // 2. MIDDLE AREA: 2 CARDS (Y = 36, Height = 156)
     // Card Gemini (Left)
     lv_obj_t *card_gemini = lv_obj_create(scr_console);
     lv_obj_set_pos(card_gemini, 8, 36);
-    lv_obj_set_size(card_gemini, 148, 168);
+    lv_obj_set_size(card_gemini, 148, 156);
     lv_obj_set_style_bg_color(card_gemini, lv_color_hex(0x162032), 0);
     lv_obj_set_style_bg_opa(card_gemini, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_gemini, lv_color_hex(0x334155), 0);
@@ -953,13 +953,13 @@ static void build_console_screen(void) {
     lv_label_set_text(lbl_gem_sub, "00:00:00");
     lv_obj_set_style_text_color(lbl_gem_sub, lv_color_hex(0x94A3B8), 0);
     lv_obj_set_style_text_font(lbl_gem_sub, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_gem_sub, LV_ALIGN_TOP_MID, 0, 118);
+    lv_obj_align(lbl_gem_sub, LV_ALIGN_TOP_MID, 0, 114);
 
     lv_obj_t *lbl_gem_w = lv_label_create(card_gemini);
     lv_label_set_text(lbl_gem_w, "Wk");
     lv_obj_set_style_text_color(lbl_gem_w, lv_color_hex(0x94A3B8), 0);
     lv_obj_set_style_text_font(lbl_gem_w, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_gem_w, LV_ALIGN_BOTTOM_LEFT, 10, -10);
+    lv_obj_align(lbl_gem_w, LV_ALIGN_BOTTOM_LEFT, 10, -8);
 
     bar_gemini_w = lv_bar_create(card_gemini);
     lv_obj_set_size(bar_gemini_w, 94, 8);
@@ -968,12 +968,12 @@ static void build_console_screen(void) {
     lv_obj_set_style_bg_color(bar_gemini_w, lv_color_hex(0x1E293B), LV_PART_MAIN);
     lv_obj_set_style_bg_color(bar_gemini_w, lv_color_hex(0x38BDF8), LV_PART_INDICATOR);
     lv_obj_set_style_radius(bar_gemini_w, 3, 0);
-    lv_obj_align(bar_gemini_w, LV_ALIGN_BOTTOM_RIGHT, -10, -12);
+    lv_obj_align(bar_gemini_w, LV_ALIGN_BOTTOM_RIGHT, -10, -10);
 
     // Card Claude (Right)
     lv_obj_t *card_claude = lv_obj_create(scr_console);
     lv_obj_set_pos(card_claude, 164, 36);
-    lv_obj_set_size(card_claude, 148, 168);
+    lv_obj_set_size(card_claude, 148, 156);
     lv_obj_set_style_bg_color(card_claude, lv_color_hex(0x162032), 0);
     lv_obj_set_style_bg_opa(card_claude, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_claude, lv_color_hex(0x334155), 0);
@@ -1012,13 +1012,13 @@ static void build_console_screen(void) {
     lv_label_set_text(lbl_cld_sub, "00:00:00");
     lv_obj_set_style_text_color(lbl_cld_sub, lv_color_hex(0x94A3B8), 0);
     lv_obj_set_style_text_font(lbl_cld_sub, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_cld_sub, LV_ALIGN_TOP_MID, 0, 118);
+    lv_obj_align(lbl_cld_sub, LV_ALIGN_TOP_MID, 0, 114);
 
     lv_obj_t *lbl_cld_w = lv_label_create(card_claude);
     lv_label_set_text(lbl_cld_w, "Wk");
     lv_obj_set_style_text_color(lbl_cld_w, lv_color_hex(0x94A3B8), 0);
     lv_obj_set_style_text_font(lbl_cld_w, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_cld_w, LV_ALIGN_BOTTOM_LEFT, 10, -10);
+    lv_obj_align(lbl_cld_w, LV_ALIGN_BOTTOM_LEFT, 10, -8);
 
     bar_claude_w = lv_bar_create(card_claude);
     lv_obj_set_size(bar_claude_w, 94, 8);
@@ -1027,12 +1027,12 @@ static void build_console_screen(void) {
     lv_obj_set_style_bg_color(bar_claude_w, lv_color_hex(0x1E293B), LV_PART_MAIN);
     lv_obj_set_style_bg_color(bar_claude_w, lv_color_hex(0xF97316), LV_PART_INDICATOR);
     lv_obj_set_style_radius(bar_claude_w, 3, 0);
-    lv_obj_align(bar_claude_w, LV_ALIGN_BOTTOM_RIGHT, -10, -12);
+    lv_obj_align(bar_claude_w, LV_ALIGN_BOTTOM_RIGHT, -10, -10);
 
-    // 3. BOTTOM BAR (Y = 208, Height = 32)
+    // 3. BOTTOM BAR (Y = 196, Height = 44)
     lv_obj_t *bottom_bar = lv_obj_create(scr_console);
-    lv_obj_set_pos(bottom_bar, 0, 208);
-    lv_obj_set_size(bottom_bar, 320, 32);
+    lv_obj_set_pos(bottom_bar, 0, 196);
+    lv_obj_set_size(bottom_bar, 320, 44);
     lv_obj_set_style_bg_color(bottom_bar, lv_color_hex(0x1E293B), 0);
     lv_obj_set_style_bg_opa(bottom_bar, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(bottom_bar, 0, 0);
@@ -1040,9 +1040,9 @@ static void build_console_screen(void) {
     lv_obj_set_style_pad_all(bottom_bar, 0, 0);
     lv_obj_clear_flag(bottom_bar, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Nút HOME nhỏ (Thay thế thông số Prompts)
+    // Nút HOME nhỏ
     lv_obj_t *btn_home = lv_btn_create(bottom_bar);
-    lv_obj_set_size(btn_home, 48, 24);
+    lv_obj_set_size(btn_home, 48, 28);
     lv_obj_align(btn_home, LV_ALIGN_LEFT_MID, 8, 0);
     lv_obj_set_style_bg_color(btn_home, lv_color_hex(0x334155), 0);
     lv_obj_set_style_radius(btn_home, 6, 0);
@@ -1054,23 +1054,23 @@ static void build_console_screen(void) {
     lv_obj_set_style_text_color(lbl_home_icon, lv_color_hex(0x38BDF8), 0);
     lv_obj_center(lbl_home_icon);
 
-    // Chú cún Shiba Pixel Pet chạy lon ton
-    img_shiba = lv_img_create(bottom_bar);
-    lv_img_set_src(img_shiba, shiba_anim_right[0]);
-    lv_obj_set_pos(img_shiba, s_shiba_x, 4);
-    lv_obj_add_flag(img_shiba, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_ext_click_area(img_shiba, 6);
-    lv_obj_add_event_cb(img_shiba, shiba_click_cb, LV_EVENT_CLICKED, NULL);
-    if (!s_pet_enabled) {
-        lv_obj_add_flag(img_shiba, LV_OBJ_FLAG_HIDDEN);
-    }
-
     // Host PC CPU | RAM Telemetry
     lbl_system = lv_label_create(bottom_bar);
     lv_label_set_text(lbl_system, "CPU: --% | RAM: --%");
     lv_obj_set_style_text_color(lbl_system, lv_color_hex(0xCBD5E1), 0);
     lv_obj_set_style_text_font(lbl_system, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl_system, LV_ALIGN_RIGHT_MID, -12, 0);
+
+    // Chú cún Shiba Pixel Pet (48x47 px) to rõ, sinh động, nằm trên scr_console
+    img_shiba = lv_img_create(scr_console);
+    lv_img_set_src(img_shiba, shiba_anim_right[0]);
+    lv_obj_set_pos(img_shiba, s_shiba_x, 191);
+    lv_obj_add_flag(img_shiba, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(img_shiba, 6);
+    lv_obj_add_event_cb(img_shiba, shiba_click_cb, LV_EVENT_CLICKED, NULL);
+    if (!s_pet_enabled) {
+        lv_obj_add_flag(img_shiba, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 // =========================================================================
