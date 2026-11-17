@@ -144,52 +144,98 @@ def get_vietnam_date():
 
 
 def find_language_server():
-    """Tìm port và CSRF token của Antigravity/Agy (Chỉ quét khi chưa cache hoặc tiến trình cũ đã chết)."""
+    """Tìm port và CSRF token của Antigravity/Agy.
+    Ưu tiên 1: Phiên làm việc active hiện tại từ symlink cli.log.
+    Ưu tiên 2: Quét tiến trình theo thứ tự MỚI NHẤT trước để bám sát account vừa đăng nhập.
+    """
     global g_cached_lsp
-    
-    # 1. Kiểm tra cache có còn sống không (Không cần quét toàn bộ hệ thống)
-    if g_cached_lsp["pid"] and os.path.exists(f"/proc/{g_cached_lsp['pid']}") and g_cached_lsp["port"]:
+    now = time.time()
+
+    # 1. Kiểm tra nếu symlink cli.log đổi sang session mới (khi người dùng mở terminal/account mới)
+    cli_log = os.path.expanduser("~/.gemini/antigravity-cli/cli.log")
+    cur_log_target = os.path.realpath(cli_log) if os.path.exists(cli_log) else None
+    if cur_log_target and cur_log_target != g_cached_lsp.get("log_target"):
+        g_cached_lsp["port"] = None
+        g_cached_lsp["pid"] = None
+        g_cached_lsp["log_target"] = cur_log_target
+
+    # 2. Tái sử dụng cache nếu chưa quá 30 giây để tối ưu CPU
+    if g_cached_lsp.get("port") and (now - g_cached_lsp.get("last_checked", 0) < 30):
         return g_cached_lsp["port"], g_cached_lsp["csrf"]
 
+    # 3. Phương thức 1: Đọc trực tiếp port HTTP từ session CLI đang active trong cli.log
+    if cur_log_target and os.path.exists(cur_log_target):
+        try:
+            with open(cur_log_target, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read(4096)
+            m = re.search(r'Language server listening on random port at (\d+) for HTTP\b', content)
+            if m:
+                port = int(m.group(1))
+                url = f'http://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary'
+                req = urllib.request.Request(url, data=b'{}', headers={'Content-Type': 'application/json'}, method='POST')
+                try:
+                    with urllib.request.urlopen(req, timeout=1.0) as resp:
+                        if resp.status == 200:
+                            g_cached_lsp["port"] = port
+                            g_cached_lsp["csrf"] = None
+                            g_cached_lsp["log_target"] = cur_log_target
+                            g_cached_lsp["last_checked"] = now
+                            return port, None
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    # 4. Phương thức 2: Quét processes, SẮP XẾP THEO TIẾN TRÌNH MỚI NHẤT TRƯỚC
     if not psutil:
         return None, None
 
     try:
-        for p in psutil.process_iter(['pid', 'name', 'cmdline']):
-            name = (p.info.get('name') or '').lower()
+        candidates = []
+        for p in psutil.process_iter(['pid', 'name', 'cmdline', 'create_time']):
+            try:
+                name = (p.info.get('name') or '').lower()
+                cmdline = p.info.get('cmdline') or []
+                cmd_str = ' '.join(cmdline).lower()
+                if 'agy' in name or 'language_server' in cmd_str or 'antigravity' in cmd_str:
+                    candidates.append(p)
+            except Exception:
+                pass
+
+        # Ưu tiên tiến trình sinh sau (create_time lớn hơn)
+        candidates.sort(key=lambda p: p.info.get('create_time') or 0, reverse=True)
+
+        for p in candidates:
             cmdline = p.info.get('cmdline') or []
-            cmd_str = ' '.join(cmdline).lower()
-            
-            # Khớp cả agy (Antigravity CLI) lẫn language_server (Antigravity IDE / VS Code)
-            if 'agy' in name or 'language_server' in cmd_str or 'antigravity' in cmd_str:
-                csrf_token = None
-                csrf_match = re.search(r'--csrf_token\s+([a-f0-9\-]+)', ' '.join(cmdline))
-                if csrf_match:
-                    csrf_token = csrf_match.group(1)
-                
-                ports = []
+            csrf_token = None
+            csrf_match = re.search(r'--csrf_token\s+([a-f0-9\-]+)', ' '.join(cmdline))
+            if csrf_match:
+                csrf_token = csrf_match.group(1)
+
+            ports = []
+            try:
+                for conn in p.connections(kind='inet'):
+                    if conn.status == psutil.CONN_LISTEN and conn.laddr.ip == '127.0.0.1':
+                        ports.append(conn.laddr.port)
+            except Exception:
+                continue
+
+            for port in ports:
+                url = f'http://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary'
+                headers = {'Content-Type': 'application/json'}
+                if csrf_token:
+                    headers['x-codeium-csrf-token'] = csrf_token
+                req = urllib.request.Request(url, data=b'{}', headers=headers, method='POST')
                 try:
-                    for conn in p.connections(kind='inet'):
-                        if conn.status == psutil.CONN_LISTEN and conn.laddr.ip == '127.0.0.1':
-                            ports.append(conn.laddr.port)
+                    with urllib.request.urlopen(req, timeout=1.0) as resp:
+                        if resp.status == 200:
+                            g_cached_lsp["pid"] = p.info["pid"]
+                            g_cached_lsp["port"] = port
+                            g_cached_lsp["csrf"] = csrf_token
+                            g_cached_lsp["last_checked"] = now
+                            return port, csrf_token
                 except Exception:
-                    continue
-                
-                for port in ports:
-                    url = f'http://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary'
-                    headers = {'Content-Type': 'application/json'}
-                    if csrf_token:
-                        headers['x-codeium-csrf-token'] = csrf_token
-                    req = urllib.request.Request(url, data=b'{}', headers=headers, method='POST')
-                    try:
-                        with urllib.request.urlopen(req, timeout=1.0) as resp:
-                            if resp.status == 200:
-                                g_cached_lsp["pid"] = p.info["pid"]
-                                g_cached_lsp["port"] = port
-                                g_cached_lsp["csrf"] = csrf_token
-                                return port, csrf_token
-                    except Exception:
-                        pass
+                    pass
     except Exception:
         pass
 

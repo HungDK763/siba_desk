@@ -66,7 +66,6 @@ Gói tin được gửi dưới dạng chuỗi UTF-8 JSON gọn nhẹ (142 bytes
 {
   "model": "Gemini 3.8 Flash (High)",
   "time": "01:23:07",
-  "quota": 42,
   "g_w": 88,
   "c_5h": 100,
   "c_w": 100,

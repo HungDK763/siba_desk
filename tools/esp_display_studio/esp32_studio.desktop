@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ESP32 Display Studio
+GenericName=Pixel & UI Design Tool for ESP32
+Comment=Pixel Art Editor, Image Converter & LVGL C Code Generator for ESP32 LaunchPad
+Exec=/usr/bin/python3 /home/hungdk4/Documents/Code/for-me/lanchPad/esp_lanchpad_hid/tools/esp_display_studio/app_desktop.py
+Icon=/home/hungdk4/Documents/Code/for-me/lanchPad/esp_lanchpad_hid/tools/esp_display_studio/icon.png
+Terminal=false
+Categories=Development;Graphics;IDE;Electronics;
+StartupNotify=true
+StartupWMClass=ESP32 LaunchPad Display Studio

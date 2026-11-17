@@ -1,0 +1,3101 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 LaunchPad Display Studio - Pixel Art & UI Suite</title>
+    <style>
+        :root {
+            --bg-base: #0B0F17;
+            --bg-surface: #131A26;
+            --bg-elevated: #1A2433;
+            --bg-card: #202D40;
+            --border: #2D3D54;
+            --border-focus: #38BDF8;
+            --primary: #38BDF8;
+            --primary-hover: #0EA5E9;
+            --accent: #F59E0B;
+            --accent-glow: rgba(245, 158, 11, 0.25);
+            --success: #10B981;
+            --danger: #EF4444;
+            --text-main: #F1F5F9;
+            --text-muted: #94A3B8;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            font-family: var(--font-family);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* --- HEADER --- */
+        header {
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border);
+            height: 52px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            flex-shrink: 0;
+            z-index: 20;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 700;
+            font-size: 15px;
+            letter-spacing: 0.5px;
+        }
+
+        .brand .logo-icon {
+            font-size: 20px;
+            color: var(--primary);
+            text-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+        }
+
+        .brand span.tag {
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--primary);
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            text-transform: uppercase;
+        }
+
+        /* Navigation Tabs */
+        .tabs {
+            display: flex;
+            background: var(--bg-base);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 3px;
+            gap: 2px;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+            background: var(--bg-elevated);
+        }
+
+        .tab-btn.active {
+            background: var(--primary);
+            color: #021426;
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .device-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            padding: 4px 10px;
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            border-radius: 20px;
+        }
+
+        .device-badge.disconnected {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            border-color: rgba(239, 68, 68, 0.25);
+        }
+
+        .device-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: currentColor;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        .btn-action {
+            background: var(--bg-elevated);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-action:hover {
+            background: var(--bg-card);
+            border-color: var(--primary);
+        }
+
+        .btn-action.btn-primary {
+            background: var(--primary);
+            color: #021426;
+            border-color: var(--primary);
+        }
+
+        .btn-action.btn-primary:hover {
+            background: var(--primary-hover);
+        }
+
+        .btn-action.btn-accent {
+            background: var(--accent);
+            color: #1a0f00;
+            border-color: var(--accent);
+            box-shadow: 0 0 12px var(--accent-glow);
+        }
+
+        /* --- MAIN LAYOUT --- */
+        main {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+        }
+
+        .view-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: none;
+            background: var(--bg-base);
+        }
+
+        .view-panel.active {
+            display: flex;
+        }
+
+        /* ======================================================================
+           TAB 1: PIXEL ART & ANIMATION STUDIO LAYOUT
+           ====================================================================== */
+        .studio-layout {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .studio-body {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Left Toolbar */
+        .toolbar {
+            width: 54px;
+            background: var(--bg-surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px 0;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .tool-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-muted);
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+            position: relative;
+        }
+
+        .tool-btn:hover {
+            background: var(--bg-elevated);
+            color: var(--text-main);
+        }
+
+        .tool-btn.active {
+            background: rgba(56, 189, 248, 0.15);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .tool-divider {
+            width: 32px;
+            height: 1px;
+            background: var(--border);
+            margin: 4px 0;
+        }
+
+        /* Canvas Workspace */
+        .workspace {
+            flex: 1;
+            background: #080C14;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .canvas-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+            user-select: none;
+            background-color: #151d2a;
+            background-image: 
+                linear-gradient(45deg, #253348 25%, transparent 25%), 
+                linear-gradient(-45deg, #253348 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #253348 75%), 
+                linear-gradient(-45deg, transparent 75%, #253348 75%);
+            background-size: 16px 16px;
+            background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+        }
+
+        #canvas-wrapper {
+            position: relative;
+            transform-origin: center center;
+            will-change: transform;
+            display: inline-block;
+        }
+
+        #pixel-canvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 0 1px var(--border);
+            background: transparent;
+            cursor: crosshair;
+            display: block;
+        }
+
+        #onion-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            image-rendering: pixelated;
+            opacity: 0.35;
+        }
+
+        /* Floating Nav & Pan Controls */
+        .canvas-floating-nav {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            background: rgba(15, 23, 42, 0.88);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            backdrop-filter: blur(8px);
+            z-index: 25;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+        }
+
+        .nav-arrow-btn {
+            width: 26px;
+            height: 26px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+            user-select: none;
+        }
+
+        .nav-arrow-btn:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+            transform: scale(1.08);
+        }
+
+        .canvas-help-hint {
+            position: absolute;
+            bottom: 14px;
+            left: 14px;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            padding: 5px 12px;
+            font-size: 11px;
+            color: var(--text-muted);
+            backdrop-filter: blur(6px);
+            z-index: 20;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .canvas-help-hint b {
+            color: var(--text-primary);
+        }
+
+        /* Top Bar inside Canvas Workspace */
+        .workspace-topbar {
+            min-height: 42px;
+            background: rgba(19, 26, 38, 0.95);
+            backdrop-filter: blur(8px);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 12px;
+            font-size: 12px;
+            z-index: 10;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .topbar-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--bg-base);
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+
+        .topbar-group label {
+            font-size: 11px;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        .topbar-num-input {
+            width: 52px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            border-radius: 4px;
+            padding: 2px 4px;
+            font-size: 11px;
+            font-family: monospace;
+            text-align: center;
+        }
+
+        .topbar-num-input:focus {
+            border-color: var(--primary);
+            outline: none;
+        }
+
+        .canvas-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-muted);
+        }
+
+        .canvas-info b {
+            color: var(--text-main);
+        }
+
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .zoom-btn {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .zoom-btn:hover {
+            border-color: var(--primary);
+        }
+
+        /* Right Properties & Palette Panel */
+        .properties-panel {
+            width: 280px;
+            background: var(--bg-surface);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .panel-section {
+            padding: 14px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .panel-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Color Picker UI */
+        .color-preview-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .color-current-swatch {
+            width: 44px;
+            height: 44px;
+            border-radius: 8px;
+            border: 2px solid var(--border);
+            box-shadow: inset 0 0 4px rgba(0,0,0,0.5);
+            cursor: pointer;
+        }
+
+        .color-hex-input {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-family: monospace;
+            width: 100px;
+        }
+
+        .palette-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 5px;
+            margin-top: 8px;
+        }
+
+        .palette-swatch {
+            aspect-ratio: 1;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: transform 0.1s;
+        }
+
+        .palette-swatch:hover {
+            transform: scale(1.15);
+            z-index: 2;
+            border-color: #FFF;
+        }
+
+        /* Animation Preview Widget in properties panel */
+        .anim-preview-box {
+            background: #080C14;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            height: 140px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+            margin-bottom: 10px;
+        }
+
+        #preview-canvas {
+            image-rendering: pixelated;
+            max-width: 90%;
+            max-height: 90%;
+        }
+
+        .anim-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* --- TIMELINE (BOTTOM) --- */
+        .timeline {
+            height: 96px;
+            background: var(--bg-surface);
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .timeline-header {
+            height: 28px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .timeline-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .timeline-frames {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            gap: 8px;
+            overflow-x: auto;
+        }
+
+        .frame-thumb-box {
+            width: 60px;
+            height: 48px;
+            background: var(--bg-elevated);
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            position: relative;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.15s;
+        }
+
+        .frame-thumb-box:hover {
+            border-color: rgba(56, 189, 248, 0.6);
+        }
+
+        .frame-thumb-box.active {
+            border-color: var(--primary);
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+        }
+
+        .frame-thumb-box canvas {
+            max-width: 90%;
+            max-height: 90%;
+            image-rendering: pixelated;
+        }
+
+        .frame-number {
+            position: absolute;
+            bottom: 2px;
+            right: 4px;
+            font-size: 9px;
+            color: var(--text-muted);
+            font-weight: bold;
+        }
+
+        .btn-add-frame {
+            width: 48px;
+            height: 48px;
+            border-radius: 6px;
+            border: 2px dashed var(--border);
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+            transition: all 0.15s;
+        }
+
+        .btn-add-frame:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: rgba(56, 189, 248, 0.05);
+        }
+
+        /* ======================================================================
+           TAB 2: IMAGE CONVERTER LAYOUT
+           ====================================================================== */
+        .converter-layout {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .converter-settings {
+            width: 360px;
+            background: var(--bg-surface);
+            border-right: 1px solid var(--border);
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .converter-preview-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            gap: 20px;
+            overflow-y: auto;
+            background: #080C14;
+        }
+
+        .dropzone {
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 30px 20px;
+            text-align: center;
+            background: var(--bg-elevated);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .dropzone:hover, .dropzone.dragover {
+            border-color: var(--primary);
+            background: rgba(56, 189, 248, 0.05);
+        }
+
+        .dropzone-icon {
+            font-size: 32px;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .form-control, .form-select {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .form-control:focus, .form-select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .preview-compare-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            flex: 1;
+        }
+
+        .preview-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .preview-card-header {
+            padding: 10px 16px;
+            background: var(--bg-elevated);
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .preview-card-body {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            min-height: 280px;
+            background-color: #151d2a;
+            background-image: 
+                linear-gradient(45deg, #253348 25%, transparent 25%), 
+                linear-gradient(-45deg, #253348 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #253348 75%), 
+                linear-gradient(-45deg, transparent 75%, #253348 75%);
+            background-size: 16px 16px;
+            background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+            position: relative;
+        }
+
+        .preview-card-body img {
+            max-width: 100%;
+            max-height: 100%;
+            image-rendering: pixelated;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+
+        /* ======================================================================
+           TAB 3: DEVICE SCREEN MOCKUP LAYOUT
+           ====================================================================== */
+        .mockup-layout {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #05080E;
+            padding: 30px;
+        }
+
+        .device-bezel {
+            width: 440px;
+            background: #1E293B;
+            border-radius: 24px;
+            padding: 24px;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.8), inset 0 2px 4px rgba(255,255,255,0.1);
+            border: 2px solid #334155;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .device-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            color: #64748B;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .lcd-screen-frame {
+            width: 320px;
+            height: 240px;
+            background: #000;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.9), 0 0 0 3px #0F172A;
+        }
+
+        #mockup-canvas {
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
+
+        .device-footer {
+            margin-top: 16px;
+            font-size: 12px;
+            color: #94A3B8;
+        }
+
+        /* ======================================================================
+           TAB 4: EXPORT & FLASH MANAGER
+           ====================================================================== */
+        .export-layout {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .export-config-card {
+            width: 380px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .export-code-card {
+            flex: 1;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .code-header {
+            padding: 12px 16px;
+            background: var(--bg-elevated);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .code-view {
+            flex: 1;
+            padding: 16px;
+            background: #070B12;
+            color: #38BDF8;
+            font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            overflow: auto;
+            white-space: pre;
+        }
+
+        /* Popup Flash Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .modal-box {
+            width: 600px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+        }
+
+        .modal-header {
+            padding: 14px 20px;
+            background: var(--bg-elevated);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 700;
+        }
+
+        .terminal-log {
+            height: 320px;
+            background: #05080E;
+            color: #A7F3D0;
+            font-family: monospace;
+            font-size: 11px;
+            padding: 14px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .modal-footer {
+            padding: 12px 20px;
+            background: var(--bg-elevated);
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* Checkbox & Radio styling */
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .checkbox-label input {
+            cursor: pointer;
+        }
+
+        /* Tooltip */
+        [title] {
+            position: relative;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- HEADER -->
+    <header>
+        <div class="brand">
+            <span class="logo-icon">🕹️</span>
+            <span>ESP32 LaunchPad Display Studio</span>
+            <span class="tag">Pixel & UI Suite</span>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="tab-pixel">
+                <span>🎨</span> Pixel & Animation
+            </button>
+            <button class="tab-btn" data-tab="tab-converter">
+                <span>🖼️</span> Chuyển Đổi Ảnh
+            </button>
+            <button class="tab-btn" data-tab="tab-mockup">
+                <span>📱</span> Màn Hình 320x240
+            </button>
+            <button class="tab-btn" data-tab="tab-export">
+                <span>⚡</span> Xuất Code & Nạp
+            </button>
+        </div>
+
+        <div class="header-actions">
+            <div class="device-badge" id="device-status-badge">
+                <span class="device-dot"></span>
+                <span id="device-status-text">Đang kiểm tra...</span>
+            </div>
+            <button class="btn-action btn-accent" id="btn-quick-flash" title="Nạp trực tiếp firmware vào ESP32 qua USB">
+                <span>⚡ Nạp Lên ESP32</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN BODY -->
+    <main>
+        <!-- ======================================================================
+             VIEW 1: PIXEL ART & ANIMATION STUDIO
+             ====================================================================== -->
+        <div class="view-panel active" id="tab-pixel">
+            <div class="studio-layout">
+                <div class="studio-body">
+                    <!-- Left Tools -->
+                    <div class="toolbar">
+                        <button class="tool-btn active" data-tool="pencil" title="Bút vẽ pixel (B)">✏️</button>
+                        <button class="tool-btn" data-tool="eraser" title="Tẩy pixel (E)">🧹</button>
+                        <button class="tool-btn" data-tool="pan" id="tool-pan" title="Kéo di chuyển khung vẽ (H / Giữ phím Space)">✋</button>
+                        <button class="tool-btn" data-tool="bucket" title="Đổ màu (G)">🪣</button>
+                        <button class="tool-btn" data-tool="eyedropper" title="Hút màu (I)">🧪</button>
+                        <div class="tool-divider"></div>
+                        <button class="tool-btn" data-tool="line" title="Vẽ đường thẳng (L)">📏</button>
+                        <button class="tool-btn" data-tool="rect" title="Vẽ hình chữ nhật (U)">⬜</button>
+                        <button class="tool-btn" data-tool="triangle_right" title="Vẽ tam giác vuông (T)">📐</button>
+                        <button class="tool-btn" data-tool="circle" title="Vẽ hình tròn / elip (C)">⚪</button>
+                        <div class="tool-divider"></div>
+                        <button class="tool-btn" id="btn-undo" title="Hoàn tác (Ctrl+Z)">↩️</button>
+                        <button class="tool-btn" id="btn-redo" title="Làm lại (Ctrl+Y)">↪️</button>
+                        <button class="tool-btn" id="btn-clear-canvas" title="Xóa trắng canvas">🗑️</button>
+                    </div>
+
+                    <!-- Center Workspace -->
+                    <div class="workspace">
+                        <div class="workspace-topbar">
+                            <!-- Page / Frame Dimensions -->
+                            <div class="topbar-group" title="Kích thước trang/frame">
+                                <label>📐 Khổ:</label>
+                                <input type="number" class="topbar-num-input" id="tb-canvas-w" value="104" min="8" max="320" title="Chiều rộng canvas">
+                                <span style="color:var(--text-muted);">×</span>
+                                <input type="number" class="topbar-num-input" id="tb-canvas-h" value="78" min="8" max="240" title="Chiều cao canvas">
+                                <select class="form-select" id="tb-preset-size" style="font-size:11px; padding:2px 6px; width:auto;">
+                                    <option value="custom">Preset...</option>
+                                    <option value="104x78">104 × 78 (Shiba)</option>
+                                    <option value="320x240">320 × 240 (Wallpaper)</option>
+                                    <option value="64x64">64 × 64 (Icon Lớn)</option>
+                                    <option value="48x48">48 × 48 (Icon)</option>
+                                    <option value="32x32">32 × 32 (Sprite)</option>
+                                    <option value="16x16">16 × 16 (Pixel Nhỏ)</option>
+                                </select>
+                                <button class="btn-action" style="padding: 2px 8px; font-size:11px;" id="btn-quick-resize" title="Đổi cỡ canvas ngay">Đổi cỡ</button>
+                            </div>
+
+                            <!-- Brush & Eraser Size Slider -->
+                            <div class="topbar-group" title="Kích thước nét cọ và tẩy">
+                                <label>🖌️ Cỡ cọ/tẩy:</label>
+                                <input type="range" id="slider-brush-size" min="1" max="16" value="1" style="width:65px;">
+                                <span id="lbl-brush-size" style="font-family:monospace; font-weight:700; color:var(--primary); min-width:32px;">1 px</span>
+                            </div>
+
+                            <!-- Opacity / Alpha Slider -->
+                            <div class="topbar-group" title="Độ phủ / Độ trong suốt của màu vẽ">
+                                <label>💧 Độ phủ:</label>
+                                <input type="range" id="slider-draw-alpha" min="0" max="255" value="255" style="width:65px;">
+                                <span id="lbl-draw-alpha" style="font-family:monospace; font-weight:700; color:var(--primary); min-width:36px;">100%</span>
+                            </div>
+
+                            <!-- Shape Fill Mode -->
+                            <div class="topbar-group" title="Chế độ tô đặc hình học">
+                                <label class="checkbox-label" style="font-size:11px; cursor:pointer;">
+                                    <input type="checkbox" id="chk-fill-shape"> Tô đặc hình
+                                </label>
+                            </div>
+
+                            <!-- View Controls -->
+                            <div class="canvas-info">
+                                <label class="checkbox-label" style="font-size:11px; cursor:pointer;">
+                                    <input type="checkbox" id="chk-pixel-grid" checked> Lưới
+                                </label>
+                                <label class="checkbox-label" style="font-size:11px; cursor:pointer;">
+                                    <input type="checkbox" id="chk-onion-skin"> Da hành
+                                </label>
+                                <span><b id="info-cursor-pos" style="font-family:monospace; font-size:11px;">X: --, Y: --</b></span>
+                            </div>
+
+                            <div class="zoom-controls">
+                                <button class="zoom-btn" id="btn-zoom-out" title="Thu nhỏ (-)">-</button>
+                                <span id="lbl-zoom" style="width: 48px; text-align: center; font-family:monospace; cursor:pointer;" title="Nhấn để chuyển đổi 100% / 600%">600%</span>
+                                <button class="zoom-btn" id="btn-zoom-in" title="Phóng to (+)">+</button>
+                                <button class="btn-action" style="padding: 2px 8px; font-size:11px;" id="btn-zoom-fit" title="Thu phóng vừa khít khung nhìn">Vừa khung</button>
+                                <button class="btn-action" style="padding: 2px 8px; font-size:11px;" id="btn-pan-center" title="Đưa khung vẽ về chính giữa">⌖ Căn giữa</button>
+                                <button class="btn-action" style="padding: 2px 8px; font-size:11px;" id="btn-resize-dialog">Tùy chọn...</button>
+                            </div>
+                        </div>
+
+                        <div class="canvas-container" id="canvas-scroll-container">
+                            <div id="canvas-wrapper">
+                                <canvas id="onion-canvas"></canvas>
+                                <canvas id="pixel-canvas"></canvas>
+                            </div>
+                            <!-- Floating Pan & Nav Controls -->
+                            <div class="canvas-floating-nav">
+                                <button class="nav-arrow-btn" id="nav-pan-up" title="Kéo lên (Shift+↑)">▲</button>
+                                <div style="display: flex; gap: 4px;">
+                                    <button class="nav-arrow-btn" id="nav-pan-left" title="Kéo sang trái (Shift+←)">◀</button>
+                                    <button class="nav-arrow-btn" id="nav-pan-center-mini" title="Căn giữa màn hình">⌖</button>
+                                    <button class="nav-arrow-btn" id="nav-pan-right" title="Kéo sang phải (Shift+→)">▶</button>
+                                </div>
+                                <button class="nav-arrow-btn" id="nav-pan-down" title="Kéo xuống (Shift+↓)">▼</button>
+                            </div>
+                            <div class="canvas-help-hint">
+                                <span>💡 <b>Zoom:</b> Cuộn chuột | <b>Kéo (Pan):</b> Giữ Space + kéo chuột, chuột phải, chuột giữa hoặc nút ✋ / ◀▶</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Panel: Properties, Palette & Preview -->
+                    <div class="properties-panel">
+                        <!-- Animation Mini Player -->
+                        <div class="panel-section">
+                            <div class="panel-title">
+                                <span>Xem trước Animation</span>
+                                <span id="lbl-anim-fps">8 FPS</span>
+                            </div>
+                            <div class="anim-preview-box">
+                                <canvas id="preview-canvas"></canvas>
+                            </div>
+                            <div class="anim-controls">
+                                <button class="btn-action" id="btn-anim-play" style="flex:1;">▶ Phát</button>
+                                <input type="range" id="slider-anim-fps" min="1" max="30" value="8" style="flex:1;" title="Chỉnh tốc độ khung hình">
+                                <button class="btn-action" id="btn-export-gif-quick" title="Xuất GIF hoạt ảnh">GIF</button>
+                            </div>
+                        </div>
+
+                        <!-- Current Color & Palettes -->
+                        <div class="panel-section" style="flex: 1;">
+                            <div class="panel-title">Màu vẽ & Bảng màu</div>
+                            <div class="color-preview-box">
+                                <div class="color-current-swatch" id="cur-color-swatch" style="background:#FFA032;"></div>
+                                <div style="display:flex; flex-direction:column; gap:4px;">
+                                    <input type="color" id="native-color-picker" value="#FFA032" style="visibility:hidden; position:absolute;">
+                                    <input type="text" class="color-hex-input" id="txt-hex-color" value="#FFA032">
+                                    <div style="display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text-muted);">
+                                        <span>Alpha:</span>
+                                        <input type="range" id="slider-alpha" min="0" max="255" value="255" style="width:70px;">
+                                        <span id="lbl-alpha">100%</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="margin-bottom: 8px;">
+                                <select class="form-select" id="select-palette-preset" style="width: 100%; font-size: 11px; padding: 4px 8px;">
+                                    <option value="pico8">Bảng màu PICO-8 (16 màu retro)</option>
+                                    <option value="lcd565">Bảng màu LCD 16-bit RGB565</option>
+                                    <option value="shiba">Bảng màu Shiba Inu (Vàng/Cam/Khăn đỏ)</option>
+                                    <option value="gameboy">Bảng màu GameBoy Classic</option>
+                                    <option value="cyberpunk">Bảng màu Cyberpunk Neon</option>
+                                </select>
+                            </div>
+
+                            <div class="palette-grid" id="palette-grid">
+                                <!-- Dynamic swatches -->
+                            </div>
+                        </div>
+
+                        <!-- Preset Project Sprites -->
+                        <div class="panel-section">
+                            <div class="panel-title">Asset Trong Dự Án</div>
+                            <div style="display: flex; flex-direction: column; gap: 6px;">
+                                <button class="btn-action" id="btn-load-bongo-shiba" style="font-size:11px; justify-content:center;">
+                                    🐶 Nạp 3 Frame Bongo Shiba (104x78)
+                                </button>
+                                <button class="btn-action" id="btn-create-wallpaper" style="font-size:11px; justify-content:center;">
+                                    🖼️ Tạo Mới Wallpaper (320x240)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timeline Bar (Bottom) -->
+                <div class="timeline">
+                    <div class="timeline-header">
+                        <div class="timeline-controls">
+                            <span>🎞️ Các khung hình (Frames)</span>
+                            <button class="btn-action" id="btn-duplicate-frame" style="padding: 2px 8px; font-size: 11px;">Nhân bản</button>
+                            <button class="btn-action" id="btn-delete-frame" style="padding: 2px 8px; font-size: 11px; color: var(--danger);">Xóa frame</button>
+                        </div>
+                        <div>
+                            <span>Frame hiện tại: <b id="lbl-current-frame-idx">1 / 1</b></span>
+                        </div>
+                    </div>
+                    <div class="timeline-frames" id="timeline-frames-list">
+                        <!-- Frame thumbnails dynamically added here -->
+                        <button class="btn-add-frame" id="btn-add-frame" title="Thêm frame rỗng mới">+</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ======================================================================
+             VIEW 2: IMAGE CONVERTER
+             ====================================================================== -->
+        <div class="view-panel" id="tab-converter">
+            <div class="converter-layout">
+                <!-- Settings Left -->
+                <div class="converter-settings" style="overflow-y: auto; max-height: calc(100vh - 120px); padding-right: 6px;">
+                    <div class="panel-title">Tải Ảnh Lên & Cấu Hình Xử Lý</div>
+
+                    <!-- Dropzone -->
+                    <div class="dropzone" id="converter-dropzone">
+                        <div class="dropzone-icon">📥</div>
+                        <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">Kéo thả ảnh vào đây</div>
+                        <div style="font-size: 12px; color: var(--text-muted);">PNG, JPG, GIF, WebP hoặc dán Ctrl+V</div>
+                        <input type="file" id="file-input-image" accept="image/*" style="display: none;">
+                    </div>
+
+                    <!-- Presets -->
+                    <div class="form-group">
+                        <label>Kích thước xuất (Presets):</label>
+                        <select class="form-select" id="converter-preset-size">
+                            <option value="104x78">104 × 78 px (Bongo Shiba / Widget lớn)</option>
+                            <option value="320x240">320 × 240 px (Full Wallpaper Nền)</option>
+                            <option value="64x64">64 × 64 px (Avatar / Game Character)</option>
+                            <option value="48x48">48 × 48 px (Icon / Nút lớn)</option>
+                            <option value="32x32">32 × 32 px (Icon trung bình)</option>
+                            <option value="16x16">16 × 16 px (Icon Paw / Badge nhỏ)</option>
+                            <option value="custom">Tùy chỉnh (Custom Width × Height)...</option>
+                        </select>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;" id="box-custom-size">
+                        <div class="form-group">
+                            <label>Chiều rộng (W):</label>
+                            <input type="number" class="form-control" id="conv-target-w" value="104" min="8" max="320">
+                        </div>
+                        <div class="form-group">
+                            <label>Chiều cao (H):</label>
+                            <input type="number" class="form-control" id="conv-target-h" value="78" min="8" max="240">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Chế độ co giãn (Scaling):</label>
+                        <select class="form-select" id="conv-scale-mode">
+                            <option value="fit">Fit (Giữ tỉ lệ, chèn viền trong suốt)</option>
+                            <option value="cover">Cover (Căn giữa và Crop vừa khít khung)</option>
+                            <option value="stretch">Stretch (Kéo dãn trực tiếp)</option>
+                            <option value="pixel_art">Pixel Art Nearest (Giữ nét pixel vuông)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Lượng tử hóa màu (Dithering LCD):</label>
+                        <select class="form-select" id="conv-dither">
+                            <option value="none">Chuẩn RGB565 (Không dither, sắc nét)</option>
+                            <option value="floyd">Floyd-Steinberg (Mịn màng, khử loang màu ảnh chụp)</option>
+                        </select>
+                    </div>
+
+                    <!-- BACKGROUND REMOVAL SUITE -->
+                    <div class="panel-section" style="padding: 12px; background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; margin-bottom: 12px;">
+                        <div style="font-weight: 700; font-size: 13px; color: var(--primary); margin-bottom: 8px; display:flex; align-items:center; gap:6px;">
+                            <span>🪄 Bộ Công Cụ Tách Nền Trong Suốt</span>
+                        </div>
+                        <label class="checkbox-label" style="margin-bottom: 8px; font-weight:600;">
+                            <input type="checkbox" id="conv-chk-bg-trans" checked> Kích hoạt Tách Nền Trong Suốt
+                        </label>
+
+                        <div class="form-group" style="margin-bottom: 8px;">
+                            <label style="font-size:11px;">Phương pháp tách nền:</label>
+                            <select class="form-select" id="conv-bg-mode" style="font-size:11px;">
+                                <option value="flood_edge">🪄 Xóa viền ngoài (Magic Wand - Giữ ruột nhân vật)</option>
+                                <option value="color">🎨 Xóa mọi pixel cùng màu (Toàn ảnh)</option>
+                                <option value="auto_corners">⚡ Tự động nhận diện màu 4 góc</option>
+                            </select>
+                        </div>
+
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom: 8px;">
+                            <input type="color" id="conv-bg-color" value="#000000" title="Màu nền cần xóa" style="width:36px; height:28px; cursor:pointer;">
+                            <input type="text" class="color-hex-input" id="conv-bg-hex" value="#000000" style="width:70px; font-size:11px;">
+                            <button class="btn-action" id="btn-pick-bg-sample" style="font-size:11px; padding:3px 8px; flex:1;" title="Nhấp chuột vào ảnh gốc bên phải để lấy mã màu chính xác">
+                                💉 Hút từ ảnh
+                            </button>
+                        </div>
+
+                        <div>
+                            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted); margin-bottom:2px;">
+                                <span>Độ dung sai màu (Tolerance):</span>
+                                <b id="lbl-trans-thresh" style="color:var(--primary);">25</b>
+                            </div>
+                            <input type="range" id="conv-trans-thresh" min="0" max="80" value="25" style="width:100%;">
+                        </div>
+                    </div>
+
+                    <!-- IMAGE ADJUSTMENTS & FILTERS -->
+                    <div class="panel-section" style="padding: 12px; background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px; margin-bottom: 12px;">
+                        <div style="font-weight: 700; font-size: 13px; color: var(--accent); margin-bottom: 8px;">
+                            <span>☀️ Bộ Lọc & Chỉnh Sửa Ảnh</span>
+                        </div>
+
+                        <div style="margin-bottom: 8px;">
+                            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted); margin-bottom:2px;">
+                                <span>Độ sáng (Brightness):</span>
+                                <b id="lbl-brightness">100%</b>
+                            </div>
+                            <input type="range" id="conv-brightness" min="30" max="200" value="100" style="width:100%;">
+                        </div>
+
+                        <div style="margin-bottom: 8px;">
+                            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted); margin-bottom:2px;">
+                                <span>Độ tương phản (Contrast):</span>
+                                <b id="lbl-contrast">100%</b>
+                            </div>
+                            <input type="range" id="conv-contrast" min="30" max="200" value="100" style="width:100%;">
+                        </div>
+
+                        <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                            <button class="btn-action" id="btn-conv-rot" style="flex:1; font-size:11px; justify-content:center;">🔄 Xoay 90°</button>
+                            <button class="btn-action" id="btn-conv-fliph" style="flex:1; font-size:11px; justify-content:center;">↔️ Lật ngang</button>
+                            <button class="btn-action" id="btn-conv-flipv" style="flex:1; font-size:11px; justify-content:center;">↕️ Lật dọc</button>
+                        </div>
+
+                        <div style="display: flex; gap: 12px; font-size:11px; margin-bottom: 6px;">
+                            <label class="checkbox-label"><input type="checkbox" id="conv-chk-gray"> Trắng đen</label>
+                            <label class="checkbox-label"><input type="checkbox" id="conv-chk-invert"> Đảo màu</label>
+                            <a href="javascript:void(0)" id="btn-conv-reset" style="margin-left:auto; color:var(--text-muted); text-decoration:none; font-size:11px;">↺ Đặt lại</a>
+                        </div>
+                    </div>
+
+                    <button class="btn-action btn-primary" id="btn-process-convert" style="width: 100%; justify-content: center; padding: 10px; margin-bottom: 6px;">
+                        ⚙️ Áp Dụng Xử Lý Ngay
+                    </button>
+
+                    <button class="btn-action btn-accent" id="btn-send-to-studio" style="width: 100%; justify-content: center; padding: 10px;">
+                        🎨 Đưa Vào Phòng Vẽ Pixel Để Chỉnh Sửa
+                    </button>
+                </div>
+
+                <!-- Preview Area Right -->
+                <div class="converter-preview-area">
+                    <div class="preview-compare-grid">
+                        <div class="preview-card">
+                            <div class="preview-card-header">
+                                <span>Ảnh Gốc (Original) - <small style="color:var(--primary); font-weight:normal;">💡 Nhấp vào ảnh để hút màu nền</small></span>
+                                <span id="lbl-orig-size">Chưa chọn ảnh</span>
+                            </div>
+                            <div class="preview-card-body" id="orig-preview-card-body">
+                                <img id="conv-img-original" src="" alt="" style="display: none; cursor: crosshair;" title="Nhấp chuột vào vị trí bất kỳ để chọn màu nền cần xóa">
+                                <span id="lbl-empty-orig" style="color: var(--text-muted); font-size: 13px;">Kéo thả ảnh hoặc chọn tệp bên trái</span>
+                            </div>
+                        </div>
+
+                        <div class="preview-card">
+                            <div class="preview-card-header">
+                                <span>Mô Phỏng LCD 16-bit RGB565 (Đã Tách Nền)</span>
+                                <span id="lbl-conv-size">-- × --</span>
+                            </div>
+                            <div class="preview-card-body">
+                                <img id="conv-img-result" src="" alt="" style="display: none;">
+                                <span id="lbl-empty-result" style="color: var(--text-muted); font-size: 13px;">Kết quả xử lý sẽ hiển thị tại đây</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ======================================================================
+             VIEW 3: SCREEN MOCKUP
+             ====================================================================== -->
+        <div class="view-panel" id="tab-mockup">
+            <div class="mockup-layout">
+                <div class="device-bezel">
+                    <div class="device-header">
+                        <span>LAUNCHPAD 2.8" TFT DISPLAY</span>
+                        <span>ILI9341 (320 × 240)</span>
+                    </div>
+                    <div class="lcd-screen-frame">
+                        <canvas id="mockup-canvas" width="320" height="240"></canvas>
+                    </div>
+                    <div class="device-footer">
+                        <span>Trực quan hóa tỉ lệ thực tế trên màn hình kit ESP32-S3</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ======================================================================
+             VIEW 4: EXPORT & FLASH MANAGER
+             ====================================================================== -->
+        <div class="view-panel" id="tab-export">
+            <div class="export-layout">
+                <div class="export-config-card">
+                    <div class="panel-title">Tùy Chọn Xuất & Nạp Thiết Bị</div>
+
+                    <div class="form-group">
+                        <label>Tên Asset (C Variable / File Name):</label>
+                        <input type="text" class="form-control" id="export-asset-name" value="custom_shiba_sprite">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Định dạng dữ liệu LVGL:</label>
+                        <select class="form-select" id="export-format">
+                            <option value="alpha">LV_IMG_CF_TRUE_COLOR_ALPHA (3 bytes/px, có trong suốt)</option>
+                            <option value="true_color">LV_IMG_CF_TRUE_COLOR (2 bytes/px, ảnh đặc/wallpaper)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="export-chk-color-swap" checked>
+                            Bật byte swap RGB565 (CONFIG_LV_COLOR_16_SWAP=y)
+                        </label>
+                        <span style="font-size: 11px; color: var(--text-muted);">
+                            * Dự án này dùng màn hình SPI ILI9341 với LV_COLOR_16_SWAP, tùy chọn này giúp tránh lỗi đảo màu Đỏ ↔ Xanh.
+                        </span>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Mục tiêu áp dụng trực tiếp vào dự án:</label>
+                        <select class="form-select" id="export-apply-target">
+                            <option value="none">Chỉ xem & tải file (Không ghi đè)</option>
+                            <option value="bongo_shiba">🐶 Thay thế Bongo Shiba (bongo_shiba_sprite.c)</option>
+                            <option value="earth_wallpaper">🌍 Thay thế Wallpaper (earth_wallpaper.c)</option>
+                            <option value="custom_file">📁 Tạo file mới trong components/display_ui/</option>
+                        </select>
+                    </div>
+
+                    <button class="btn-action btn-primary" id="btn-generate-c" style="width: 100%; justify-content: center; padding: 10px;">
+                        📝 Sinh Mã Nguồn C & Header
+                    </button>
+
+                    <button class="btn-action btn-accent" id="btn-flash-now" style="width: 100%; justify-content: center; padding: 12px;">
+                        ⚡ Biên Dịch & Nạp Trực Tiếp Lên ESP32
+                    </button>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;">
+                        <button class="btn-action" id="btn-download-c">Tải file .C</button>
+                        <button class="btn-action" id="btn-download-h">Tải file .H</button>
+                        <button class="btn-action" id="btn-download-png">Tải PNG (1x)</button>
+                        <button class="btn-action" id="btn-download-gif">Tải GIF Hoạt Ảnh</button>
+                    </div>
+                </div>
+
+                <div class="export-code-card">
+                    <div class="code-header">
+                        <span id="lbl-code-filename">Mã Nguồn C (Preview)</span>
+                        <button class="btn-action" id="btn-copy-code" style="padding: 2px 10px; font-size: 11px;">Sao chép</button>
+                    </div>
+                    <div class="code-view" id="code-output">// Nhấn "Sinh Mã Nguồn C & Header" để xem code...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- POPUP MODAL: FLASH CONSOLE LOG -->
+    <div class="modal-overlay" id="flash-modal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <span>🚀 Đang Nạp Firmware Lên ESP32-S3</span>
+                <span id="lbl-flash-spin">⏳</span>
+            </div>
+            <div class="terminal-log" id="flash-log-console">Đang kết nối cổng /dev/ttyACM0...</div>
+            <div class="modal-footer">
+                <button class="btn-action" id="btn-close-flash-modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DIALOG: RESIZE CANVAS -->
+    <dialog id="dlg-resize" style="background:var(--bg-surface); color:var(--text-main); border:1px solid var(--border); border-radius:12px; padding:20px; margin:auto; max-width:400px; box-shadow:0 10px 40px rgba(0,0,0,0.8);">
+        <div style="font-weight:bold; margin-bottom:14px; font-size:14px; color:var(--primary);">📐 Tùy Chọn Đổi Kích Thước Canvas / Frame</div>
+        <div style="display:flex; gap:10px; margin-bottom:12px;">
+            <div style="flex:1;">
+                <label style="font-size:11px; color:var(--text-muted);">Chiều rộng (W px):</label>
+                <input type="number" class="form-control" id="resize-w" min="8" max="320" value="104">
+            </div>
+            <div style="flex:1;">
+                <label style="font-size:11px; color:var(--text-muted);">Chiều cao (H px):</label>
+                <input type="number" class="form-control" id="resize-h" min="8" max="240" value="78">
+            </div>
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+            <label style="font-size:11px; color:var(--text-muted);">Phương thức co giãn nội dung:</label>
+            <select class="form-select" id="resize-mode" style="font-size:12px;">
+                <option value="anchor_tl">Cắt / Mở rộng giữ góc trên bên trái (Top-Left Anchor)</option>
+                <option value="anchor_center">Cắt / Mở rộng giữ ở tâm chính giữa (Center Anchor)</option>
+                <option value="scale">Co giãn toàn bộ hình vẽ (Scale Nearest-Neighbor)</option>
+                <option value="blank">Tạo mới khung vẽ trắng tinh</option>
+            </select>
+        </div>
+        <div style="margin-bottom:16px;">
+            <label class="checkbox-label" style="font-size:11px; cursor:pointer;">
+                <input type="checkbox" id="resize-apply-all" checked> Áp dụng cho toàn bộ các Frame trong Timeline
+            </label>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button class="btn-action" id="btn-resize-cancel">Hủy</button>
+            <button class="btn-action btn-primary" id="btn-resize-apply">Đồng ý</button>
+        </div>
+    </dialog>
+
+    <!-- APP JAVASCRIPT LOGIC -->
+    <script>
+        // ======================================================================
+        // STATE MANAGEMENT
+        // ======================================================================
+        const STATE = {
+            width: 104,
+            height: 78,
+            zoom: 6,
+            panX: 0,
+            panY: 0,
+            isPanning: false,
+            panStartX: 0,
+            panStartY: 0,
+            spacePressed: false,
+            tool: 'pencil', // pencil, eraser, pan, bucket, eyedropper, line, rect, triangle_right, circle
+            brushSize: 1, // 1 to 16 px
+            drawAlpha: 255, // 0 to 255
+            fillShape: false, // true = filled, false = outline
+            currentColor: [254, 160, 50, 255], // RGBA
+            frames: [], // Array of ImageData
+            currentFrameIdx: 0,
+            undoStack: [],
+            redoStack: [],
+            isDrawing: false,
+            startX: -1,
+            startY: -1,
+            lastX: -1,
+            lastY: -1,
+            shapeSnapshot: null,
+            showGrid: true,
+            onionSkin: false,
+            animPlaying: false,
+            animFps: 8,
+            animInterval: null,
+            lastConvertedImg: null,
+            generatedC: '',
+            generatedH: '',
+            // Converter state
+            convRotate: 0,
+            convFlipH: false,
+            convFlipV: false,
+            convDebounceTimer: null
+        };
+
+        // DOM Elements
+        const canvas = document.getElementById('pixel-canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const onionCanvas = document.getElementById('onion-canvas');
+        const onionCtx = onionCanvas.getContext('2d');
+        const previewCanvas = document.getElementById('preview-canvas');
+        const previewCtx = previewCanvas.getContext('2d');
+        const mockupCanvas = document.getElementById('mockup-canvas');
+        const mockupCtx = mockupCanvas.getContext('2d');
+
+        // Palettes
+        const PALETTES = {
+            pico8: [
+                '#000000', '#1D2B53', '#7E2553', '#008751', '#AB5236', '#5F574F', '#C2C3C7', '#FFF1E8',
+                '#FF004D', '#FFA300', '#FFEC27', '#00E436', '#29ADFF', '#83769C', '#FF77A8', '#FFCCAA'
+            ],
+            lcd565: [
+                '#000000', '#FFFFFF', '#F80000', '#07E000', '#001FF8', '#FFE000', '#07FFF8', '#F81FF8',
+                '#182018', '#384038', '#586058', '#788078', '#98A098', '#B8C0B8', '#D8E0D8', '#F8F8F8'
+            ],
+            shiba: [
+                '#000000', '#2E1500', '#632B00', '#A34800', '#E06B00', '#FF8C19', '#FFA032', '#FFBC6B',
+                '#FFE0B2', '#FFFFFF', '#C62828', '#E53935', '#FFCDD2', '#3E2723', '#4E342E', '#8D6E63'
+            ],
+            gameboy: [
+                '#0F380F', '#306230', '#8BAC0F', '#9BBC0F', '#000000', '#202020', '#A0A0A0', '#FFFFFF'
+            ],
+            cyberpunk: [
+                '#05050A', '#0D1B2A', '#1B263B', '#415A77', '#778DA9', '#E0E1DD', '#FF0055', '#00F0FF',
+                '#FFE600', '#7B2CBF', '#9D4EDD', '#39FF14', '#FF5400', '#F72585', '#7209B7', '#4CC9F0'
+            ]
+        };
+
+        // ======================================================================
+        // INITIALIZATION
+        // ======================================================================
+        function initApp() {
+            initNavigation();
+            initTools();
+            initPalette('pico8');
+            initCanvasEvents();
+            initTimelineEvents();
+            initConverterEvents();
+            initExportEvents();
+            initMockupEvents();
+            checkDeviceStatus();
+            setInterval(checkDeviceStatus, 5000);
+
+            // Tạo frame đầu tiên
+            resetCanvasSize(104, 78, 'blank', true);
+            addEmptyFrame();
+
+            // Load Bongo Shiba có sẵn của dự án
+            loadProjectAssets();
+        }
+
+        // --- NAVIGATION TABS ---
+        function initNavigation() {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                    document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+                    btn.classList.add('active');
+                    const tabId = btn.getAttribute('data-tab');
+                    document.getElementById(tabId).classList.add('active');
+
+                    if (tabId === 'tab-mockup') renderMockup();
+                });
+            });
+        }
+
+        // --- DEVICE STATUS CHECK ---
+        async function checkDeviceStatus() {
+            try {
+                const res = await fetch('/api/device_status');
+                const data = await res.json();
+                const badge = document.getElementById('device-status-badge');
+                const txt = document.getElementById('device-status-text');
+                if (data.connected) {
+                    badge.classList.remove('disconnected');
+                    txt.textContent = 'ESP32 Sẵn Sàng (' + data.port + ')';
+                } else {
+                    badge.classList.add('disconnected');
+                    txt.textContent = 'Chưa cắm ESP32';
+                }
+            } catch (e) {}
+        }
+
+        // ======================================================================
+        // CANVAS & TOOLS LOGIC
+        // ======================================================================
+        function resetCanvasSize(w, h, mode = 'anchor_tl', applyAll = true) {
+            const oldW = STATE.width;
+            const oldH = STATE.height;
+            STATE.width = w;
+            STATE.height = h;
+
+            canvas.width = w;
+            canvas.height = h;
+            onionCanvas.width = w;
+            onionCanvas.height = h;
+            previewCanvas.width = w;
+            previewCanvas.height = h;
+
+            document.getElementById('info-canvas-size').textContent = `${w} × ${h}`;
+            document.getElementById('tb-canvas-w').value = w;
+            document.getElementById('tb-canvas-h').value = h;
+
+            // Điều chỉnh nội dung các frame cũ nếu có
+            if (STATE.frames.length > 0) {
+                for (let i = 0; i < STATE.frames.length; i++) {
+                    if (!applyAll && i !== STATE.currentFrameIdx) continue;
+                    const oldFrame = STATE.frames[i];
+                    const tempC = document.createElement('canvas');
+                    tempC.width = oldW;
+                    tempC.height = oldH;
+                    tempC.getContext('2d').putImageData(oldFrame, 0, 0);
+
+                    const newC = document.createElement('canvas');
+                    newC.width = w;
+                    newC.height = h;
+                    const nctx = newC.getContext('2d');
+                    nctx.imageSmoothingEnabled = false;
+
+                    if (mode === 'anchor_tl') {
+                        nctx.drawImage(tempC, 0, 0);
+                    } else if (mode === 'anchor_center') {
+                        const ox = Math.round((w - oldW) / 2);
+                        const oy = Math.round((h - oldH) / 2);
+                        nctx.drawImage(tempC, ox, oy);
+                    } else if (mode === 'scale') {
+                        nctx.drawImage(tempC, 0, 0, w, h);
+                    } // 'blank': để trống
+
+                    STATE.frames[i] = nctx.getImageData(0, 0, w, h);
+                }
+                ctx.putImageData(STATE.frames[STATE.currentFrameIdx], 0, 0);
+            }
+
+            applyZoom();
+            renderTimeline();
+            renderOnionSkin();
+        }
+
+        function applyZoom() {
+            const z = STATE.zoom;
+            const w = STATE.width * z;
+            const h = STATE.height * z;
+            canvas.style.width = w + 'px';
+            canvas.style.height = h + 'px';
+            onionCanvas.style.width = w + 'px';
+            onionCanvas.style.height = h + 'px';
+
+            const wrapper = document.getElementById('canvas-wrapper');
+            if (wrapper) {
+                wrapper.style.width = w + 'px';
+                wrapper.style.height = h + 'px';
+                wrapper.style.transform = `translate(${Math.round(STATE.panX)}px, ${Math.round(STATE.panY)}px)`;
+            }
+
+            const lbl = document.getElementById('lbl-zoom');
+            if (lbl) lbl.textContent = Math.round(z * 100) + '%';
+        }
+
+        function zoomAtPoint(newZoom, mouseClientX, mouseClientY) {
+            newZoom = Math.max(1, Math.min(32, newZoom));
+            if (newZoom === STATE.zoom) return;
+
+            const container = document.getElementById('canvas-scroll-container');
+            if (!container) {
+                STATE.zoom = newZoom;
+                applyZoom();
+                return;
+            }
+
+            const cRect = container.getBoundingClientRect();
+            const containerCenterX = cRect.left + cRect.width / 2;
+            const containerCenterY = cRect.top + cRect.height / 2;
+
+            const curCenterX = containerCenterX + STATE.panX;
+            const curCenterY = containerCenterY + STATE.panY;
+
+            const dx = mouseClientX - curCenterX;
+            const dy = mouseClientY - curCenterY;
+
+            const ratio = newZoom / STATE.zoom;
+
+            STATE.panX = STATE.panX + dx * (1 - ratio);
+            STATE.panY = STATE.panY + dy * (1 - ratio);
+            STATE.zoom = newZoom;
+
+            applyZoom();
+        }
+
+        function stepZoom(direction) {
+            const levels = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 32];
+            if (direction > 0) {
+                const next = levels.find(l => l > STATE.zoom);
+                STATE.zoom = next !== undefined ? next : Math.min(32, STATE.zoom + 2);
+            } else {
+                const prev = [...levels].reverse().find(l => l < STATE.zoom);
+                STATE.zoom = prev !== undefined ? prev : Math.max(1, STATE.zoom - 2);
+            }
+            applyZoom();
+        }
+
+        function centerCanvas() {
+            STATE.panX = 0;
+            STATE.panY = 0;
+            applyZoom();
+        }
+
+        function fitCanvasToScreen() {
+            const container = document.getElementById('canvas-scroll-container');
+            if (!container) return;
+            const availW = container.clientWidth - 80;
+            const availH = container.clientHeight - 80;
+            if (availW > 0 && availH > 0) {
+                const zx = availW / STATE.width;
+                const zy = availH / STATE.height;
+                let z = Math.floor(Math.min(zx, zy));
+                if (z < 1) z = 1;
+                if (z > 32) z = 32;
+                STATE.zoom = z;
+            }
+            STATE.panX = 0;
+            STATE.panY = 0;
+            applyZoom();
+        }
+
+        function updateCanvasCursor() {
+            const container = document.getElementById('canvas-scroll-container');
+            if (STATE.isPanning) {
+                canvas.style.cursor = 'grabbing';
+                if (container) container.style.cursor = 'grabbing';
+            } else if (STATE.spacePressed || STATE.tool === 'pan') {
+                canvas.style.cursor = 'grab';
+                if (container) container.style.cursor = 'grab';
+            } else if (STATE.tool === 'eyedropper') {
+                canvas.style.cursor = 'crosshair';
+                if (container) container.style.cursor = 'default';
+            } else {
+                canvas.style.cursor = 'crosshair';
+                if (container) container.style.cursor = 'default';
+            }
+        }
+
+        function initTools() {
+            // Danh sách nút công cụ
+            document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    STATE.tool = btn.getAttribute('data-tool');
+                });
+            });
+
+            // Brush / Eraser Size Slider
+            const brushSlider = document.getElementById('slider-brush-size');
+            const brushLbl = document.getElementById('lbl-brush-size');
+            if (brushSlider) {
+                brushSlider.addEventListener('input', (e) => {
+                    STATE.brushSize = parseInt(e.target.value);
+                    brushLbl.textContent = STATE.brushSize + ' px';
+                });
+            }
+
+            // Opacity / Alpha Slider
+            const drawAlphaSlider = document.getElementById('slider-draw-alpha');
+            const drawAlphaLbl = document.getElementById('lbl-draw-alpha');
+            const palAlphaSlider = document.getElementById('slider-alpha');
+            const palAlphaLbl = document.getElementById('lbl-alpha');
+
+            function syncAlpha(val) {
+                STATE.drawAlpha = val;
+                STATE.currentColor[3] = val;
+                const pct = Math.round(val * 100 / 255) + '%';
+                if (drawAlphaSlider) drawAlphaSlider.value = val;
+                if (drawAlphaLbl) drawAlphaLbl.textContent = pct;
+                if (palAlphaSlider) palAlphaSlider.value = val;
+                if (palAlphaLbl) palAlphaLbl.textContent = pct;
+                updateSwatchUI();
+            }
+
+            if (drawAlphaSlider) {
+                drawAlphaSlider.addEventListener('input', (e) => syncAlpha(parseInt(e.target.value)));
+            }
+            if (palAlphaSlider) {
+                palAlphaSlider.addEventListener('input', (e) => syncAlpha(parseInt(e.target.value)));
+            }
+
+            // Shape Fill Toggle
+            const chkFill = document.getElementById('chk-fill-shape');
+            if (chkFill) {
+                chkFill.addEventListener('change', (e) => {
+                    STATE.fillShape = e.target.checked;
+                });
+            }
+
+            // Quick Canvas Dimensions on Topbar
+            const tbPreset = document.getElementById('tb-preset-size');
+            const tbW = document.getElementById('tb-canvas-w');
+            const tbH = document.getElementById('tb-canvas-h');
+            if (tbPreset) {
+                tbPreset.addEventListener('change', (e) => {
+                    const val = e.target.value;
+                    if (val !== 'custom') {
+                        const [w, h] = val.split('x').map(Number);
+                        tbW.value = w;
+                        tbH.value = h;
+                        resetCanvasSize(w, h, 'anchor_tl', true);
+                    }
+                });
+            }
+            document.getElementById('btn-quick-resize')?.addEventListener('click', () => {
+                const nw = parseInt(tbW.value);
+                const nh = parseInt(tbH.value);
+                if (nw > 0 && nh > 0) {
+                    resetCanvasSize(nw, nh, 'anchor_tl', true);
+                }
+            });
+
+            // Zoom & Pan Controls
+            document.getElementById('btn-zoom-in')?.addEventListener('click', () => stepZoom(1));
+            document.getElementById('btn-zoom-out')?.addEventListener('click', () => stepZoom(-1));
+            document.getElementById('btn-zoom-fit')?.addEventListener('click', fitCanvasToScreen);
+            document.getElementById('btn-pan-center')?.addEventListener('click', centerCanvas);
+            document.getElementById('lbl-zoom')?.addEventListener('click', () => {
+                STATE.zoom = (STATE.zoom === 6) ? 1 : 6;
+                centerCanvas();
+            });
+
+            // Floating Navigation Arrow Buttons
+            document.getElementById('nav-pan-left')?.addEventListener('click', () => { STATE.panX += 60; applyZoom(); });
+            document.getElementById('nav-pan-right')?.addEventListener('click', () => { STATE.panX -= 60; applyZoom(); });
+            document.getElementById('nav-pan-up')?.addEventListener('click', () => { STATE.panY += 60; applyZoom(); });
+            document.getElementById('nav-pan-down')?.addEventListener('click', () => { STATE.panY -= 60; applyZoom(); });
+            document.getElementById('nav-pan-center-mini')?.addEventListener('click', centerCanvas);
+
+            // Grid toggle
+            document.getElementById('chk-pixel-grid').addEventListener('change', (e) => {
+                STATE.showGrid = e.target.checked;
+                canvas.style.boxShadow = STATE.showGrid 
+                    ? '0 0 30px rgba(0, 0, 0, 0.8), 0 0 0 1px var(--border)' 
+                    : '0 0 30px rgba(0, 0, 0, 0.8)';
+            });
+
+            // Onion skin toggle
+            document.getElementById('chk-onion-skin').addEventListener('change', (e) => {
+                STATE.onionSkin = e.target.checked;
+                renderOnionSkin();
+            });
+
+            // Undo / Redo / Clear
+            document.getElementById('btn-undo').addEventListener('click', undo);
+            document.getElementById('btn-redo').addEventListener('click', redo);
+            document.getElementById('btn-clear-canvas').addEventListener('click', () => {
+                if (confirm('Xóa trắng toàn bộ frame này?')) {
+                    saveUndo();
+                    ctx.clearRect(0, 0, STATE.width, STATE.height);
+                    saveCurrentFrame();
+                }
+            });
+
+            // Advanced Resize Dialog
+            document.getElementById('btn-resize-dialog').addEventListener('click', () => {
+                document.getElementById('resize-w').value = STATE.width;
+                document.getElementById('resize-h').value = STATE.height;
+                document.getElementById('dlg-resize').showModal();
+            });
+            document.getElementById('btn-resize-cancel').addEventListener('click', () => {
+                document.getElementById('dlg-resize').close();
+            });
+            document.getElementById('btn-resize-apply').addEventListener('click', () => {
+                const nw = parseInt(document.getElementById('resize-w').value);
+                const nh = parseInt(document.getElementById('resize-h').value);
+                const mode = document.getElementById('resize-mode').value;
+                const applyAll = document.getElementById('resize-apply-all').checked;
+
+                if (nw > 0 && nh > 0) {
+                    resetCanvasSize(nw, nh, mode, applyAll);
+                }
+                document.getElementById('dlg-resize').close();
+            });
+        }
+
+        // --- PALETTES & COLOR PICKER ---
+        function initPalette(presetKey) {
+            const grid = document.getElementById('palette-grid');
+            grid.innerHTML = '';
+            const colors = PALETTES[presetKey] || PALETTES.pico8;
+
+            colors.forEach(hex => {
+                const swatch = document.createElement('div');
+                swatch.className = 'palette-swatch';
+                swatch.style.backgroundColor = hex;
+                swatch.addEventListener('click', () => setColorFromHex(hex));
+                grid.appendChild(swatch);
+            });
+
+            document.getElementById('select-palette-preset').addEventListener('change', (e) => {
+                initPalette(e.target.value);
+            });
+
+            // Native color picker trigger
+            const curSwatch = document.getElementById('cur-color-swatch');
+            const nativePicker = document.getElementById('native-color-picker');
+            curSwatch.addEventListener('click', () => nativePicker.click());
+            nativePicker.addEventListener('input', (e) => setColorFromHex(e.target.value));
+
+            document.getElementById('txt-hex-color').addEventListener('change', (e) => {
+                setColorFromHex(e.target.value);
+            });
+        }
+
+        function setColorFromHex(hex) {
+            hex = hex.replace('#', '');
+            if (hex.length === 3) hex = hex.split('').map(c => c+c).join('');
+            const r = parseInt(hex.substring(0, 2), 16) || 0;
+            const g = parseInt(hex.substring(2, 4), 16) || 0;
+            const b = parseInt(hex.substring(4, 6), 16) || 0;
+            STATE.currentColor[0] = r;
+            STATE.currentColor[1] = g;
+            STATE.currentColor[2] = b;
+            document.getElementById('txt-hex-color').value = '#' + hex.toUpperCase();
+            document.getElementById('native-color-picker').value = '#' + hex;
+            updateSwatchUI();
+        }
+
+        function updateSwatchUI() {
+            const [r, g, b] = STATE.currentColor;
+            const a = STATE.drawAlpha;
+            document.getElementById('cur-color-swatch').style.backgroundColor = `rgba(${r},${g},${b},${a/255})`;
+        }
+
+        // --- DRAWING ENGINE (PORTER-DUFF BLEND & BRUSH SIZE) ---
+        function getCanvasCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const x = Math.floor((e.clientX - rect.left) * scaleX);
+            const y = Math.floor((e.clientY - rect.top) * scaleY);
+            return {
+                x: Math.max(0, Math.min(STATE.width - 1, x)),
+                y: Math.max(0, Math.min(STATE.height - 1, y))
+            };
+        }
+
+        function setPixel(x, y, r, g, b, a) {
+            if (x < 0 || x >= STATE.width || y < 0 || y >= STATE.height) return;
+
+            if (a === 0) {
+                // Tẩy pixel về trong suốt
+                const imgData = ctx.createImageData(1, 1);
+                imgData.data[0] = 0;
+                imgData.data[1] = 0;
+                imgData.data[2] = 0;
+                imgData.data[3] = 0;
+                ctx.putImageData(imgData, x, y);
+                return;
+            }
+
+            if (a === 255) {
+                // Phủ 100%
+                const imgData = ctx.createImageData(1, 1);
+                imgData.data[0] = r;
+                imgData.data[1] = g;
+                imgData.data[2] = b;
+                imgData.data[3] = 255;
+                ctx.putImageData(imgData, x, y);
+                return;
+            }
+
+            // Alpha blending khi 0 < a < 255
+            const p = ctx.getImageData(x, y, 1, 1).data;
+            const bgR = p[0], bgG = p[1], bgB = p[2], bgA = p[3] / 255.0;
+            const fgA = a / 255.0;
+            const outA = fgA + bgA * (1.0 - fgA);
+
+            if (outA > 0) {
+                const outR = Math.round((r * fgA + bgR * bgA * (1.0 - fgA)) / outA);
+                const outG = Math.round((g * fgA + bgG * bgA * (1.0 - fgA)) / outA);
+                const outB = Math.round((b * fgA + bgB * bgA * (1.0 - fgA)) / outA);
+
+                const imgData = ctx.createImageData(1, 1);
+                imgData.data[0] = outR;
+                imgData.data[1] = outG;
+                imgData.data[2] = outB;
+                imgData.data[3] = Math.round(outA * 255.0);
+                ctx.putImageData(imgData, x, y);
+            }
+        }
+
+        function drawBrushStamp(cx, cy, isEraserOverride = null) {
+            const size = STATE.brushSize;
+            const isEraser = isEraserOverride !== null ? isEraserOverride : (STATE.tool === 'eraser');
+            const [r, g, b] = STATE.currentColor;
+            const a = isEraser ? 0 : STATE.drawAlpha;
+
+            if (size === 1) {
+                setPixel(cx, cy, r, g, b, a);
+                return;
+            }
+
+            const half = Math.floor(size / 2);
+            for (let dy = -half; dy <= half; dy++) {
+                for (let dx = -half; dx <= half; dx++) {
+                    if (size >= 3 && (dx * dx + dy * dy) > (half + 0.3) * (half + 0.3)) continue;
+                    setPixel(cx + dx, cy + dy, r, g, b, a);
+                }
+            }
+        }
+
+        function drawBrushLine(x0, y0, x1, y1, isEraserOverride = null) {
+            const dx = Math.abs(x1 - x0);
+            const dy = Math.abs(y1 - y0);
+            const sx = (x0 < x1) ? 1 : -1;
+            const sy = (y0 < y1) ? 1 : -1;
+            let err = dx - dy;
+
+            while (true) {
+                drawBrushStamp(x0, y0, isEraserOverride);
+                if (x0 === x1 && y0 === y1) break;
+                const e2 = 2 * err;
+                if (e2 > -dy) { err -= dy; x0 += sx; }
+                if (e2 < dx) { err += dx; y0 += sy; }
+            }
+        }
+
+        function renderLine(x0, y0, x1, y1) {
+            drawBrushLine(x0, y0, x1, y1, false);
+        }
+
+        function renderRect(x0, y0, x1, y1, filled) {
+            const minX = Math.min(x0, x1);
+            const maxX = Math.max(x0, x1);
+            const minY = Math.min(y0, y1);
+            const maxY = Math.max(y0, y1);
+
+            if (filled) {
+                for (let y = minY; y <= maxY; y++) {
+                    for (let x = minX; x <= maxX; x++) {
+                        drawBrushStamp(x, y, false);
+                    }
+                }
+            } else {
+                drawBrushLine(minX, minY, maxX, minY, false);
+                drawBrushLine(minX, maxY, maxX, maxY, false);
+                drawBrushLine(minX, minY, minX, maxY, false);
+                drawBrushLine(maxX, minY, maxX, maxY, false);
+            }
+        }
+
+        function renderRightTriangle(x0, y0, x1, y1, filled) {
+            // Đỉnh góc vuông tại (x0, y1)
+            if (filled) {
+                const minY = Math.min(y0, y1);
+                const maxY = Math.max(y0, y1);
+                for (let y = minY; y <= maxY; y++) {
+                    const ratio = (y1 === y0) ? 1 : ((y - y0) / (y1 - y0));
+                    const curX = Math.round(x0 + ratio * (x1 - x0));
+                    const start = Math.min(x0, curX);
+                    const end = Math.max(x0, curX);
+                    for (let x = start; x <= end; x++) {
+                        drawBrushStamp(x, y, false);
+                    }
+                }
+            } else {
+                // Cạnh đứng
+                drawBrushLine(x0, y0, x0, y1, false);
+                // Cạnh ngang
+                drawBrushLine(x0, y1, x1, y1, false);
+                // Cạnh huyền
+                drawBrushLine(x0, y0, x1, y1, false);
+            }
+        }
+
+        function renderCircle(x0, y0, x1, y1, filled) {
+            const cx = (x0 + x1) / 2;
+            const cy = (y0 + y1) / 2;
+            const rx = Math.abs(x1 - x0) / 2;
+            const ry = Math.abs(y1 - y0) / 2;
+
+            if (rx < 0.5 && ry < 0.5) {
+                drawBrushStamp(x0, y0, false);
+                return;
+            }
+
+            if (filled) {
+                for (let dy = -Math.ceil(ry); dy <= Math.ceil(ry); dy++) {
+                    const normY = dy / (ry || 1);
+                    if (Math.abs(normY) <= 1.0) {
+                        const maxDx = Math.round(rx * Math.sqrt(Math.max(0, 1 - normY * normY)));
+                        for (let dx = -maxDx; dx <= maxDx; dx++) {
+                            drawBrushStamp(Math.round(cx + dx), Math.round(cy + dy), false);
+                        }
+                    }
+                }
+            } else {
+                const steps = Math.max(20, Math.round(Math.PI * (rx + ry)));
+                let prevX = Math.round(cx + rx);
+                let prevY = Math.round(cy);
+                for (let i = 1; i <= steps; i++) {
+                    const theta = (i / steps) * 2 * Math.PI;
+                    const nx = Math.round(cx + rx * Math.cos(theta));
+                    const ny = Math.round(cy + ry * Math.sin(theta));
+                    drawBrushLine(prevX, prevY, nx, ny, false);
+                    prevX = nx;
+                    prevY = ny;
+                }
+            }
+        }
+
+        function floodFill(startX, startY, fillColor) {
+            const imgData = ctx.getImageData(0, 0, STATE.width, STATE.height);
+            const data = imgData.data;
+            const w = STATE.width;
+            const h = STATE.height;
+
+            const targetIdx = (startY * w + startX) * 4;
+            const targetColor = [data[targetIdx], data[targetIdx+1], data[targetIdx+2], data[targetIdx+3]];
+
+            if (targetColor[0] === fillColor[0] && targetColor[1] === fillColor[1] &&
+                targetColor[2] === fillColor[2] && targetColor[3] === fillColor[3]) return;
+
+            const stack = [[startX, startY]];
+            while (stack.length) {
+                const [cx, cy] = stack.pop();
+                const idx = (cy * w + cx) * 4;
+
+                if (data[idx] === targetColor[0] && data[idx+1] === targetColor[1] &&
+                    data[idx+2] === targetColor[2] && data[idx+3] === targetColor[3]) {
+
+                    data[idx] = fillColor[0];
+                    data[idx+1] = fillColor[1];
+                    data[idx+2] = fillColor[2];
+                    data[idx+3] = fillColor[3];
+
+                    if (cx > 0) stack.push([cx - 1, cy]);
+                    if (cx < w - 1) stack.push([cx + 1, cy]);
+                    if (cy > 0) stack.push([cx, cy - 1]);
+                    if (cy < h - 1) stack.push([cx, cy + 1]);
+                }
+            }
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        function initCanvasEvents() {
+            const canvasContainer = document.getElementById('canvas-scroll-container');
+
+            function startPan(e) {
+                STATE.isPanning = true;
+                STATE.panStartX = e.clientX - STATE.panX;
+                STATE.panStartY = e.clientY - STATE.panY;
+                updateCanvasCursor();
+            }
+
+            // Mousedown on empty container area or with pan tool / middle / right click
+            canvasContainer.addEventListener('mousedown', (e) => {
+                if (e.target === canvasContainer || e.button === 1 || e.button === 2 || STATE.spacePressed || STATE.tool === 'pan') {
+                    startPan(e);
+                    e.preventDefault();
+                }
+            });
+
+            // Prevent default right-click menu on canvas and container for seamless right-click panning
+            canvasContainer.addEventListener('contextmenu', (e) => e.preventDefault());
+            canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+            // Mouse wheel / Touchpad gestures
+            canvasContainer.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    // Shift + Wheel = Pan horizontally
+                    STATE.panX -= (e.deltaY || e.deltaX);
+                    applyZoom();
+                } else if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 2) {
+                    // Two-finger horizontal trackpad pan
+                    STATE.panX -= e.deltaX;
+                    applyZoom();
+                } else {
+                    // Wheel or Ctrl+Wheel = Zoom centered on cursor
+                    const zoomDelta = e.deltaY < 0 ? 1 : -1;
+                    let step = 1;
+                    if (STATE.zoom >= 8) step = 2;
+                    if (STATE.zoom >= 16) step = 4;
+                    const newZoom = Math.max(1, Math.min(32, STATE.zoom + zoomDelta * step));
+                    zoomAtPoint(newZoom, e.clientX, e.clientY);
+                }
+            }, { passive: false });
+
+            // Mousedown on Canvas
+            canvas.addEventListener('mousedown', (e) => {
+                // If pan tool, space held, middle or right click -> PAN
+                if (e.button === 1 || e.button === 2 || STATE.spacePressed || STATE.tool === 'pan') {
+                    startPan(e);
+                    e.preventDefault();
+                    return;
+                }
+
+                if (e.button !== 0) return; // Chỉ nhận chuột trái để vẽ
+                saveUndo();
+                STATE.isDrawing = true;
+                const { x, y } = getCanvasCoords(e);
+                STATE.startX = x;
+                STATE.startY = y;
+                STATE.lastX = x;
+                STATE.lastY = y;
+
+                if (STATE.tool === 'pencil') {
+                    drawBrushStamp(x, y, false);
+                } else if (STATE.tool === 'eraser') {
+                    drawBrushStamp(x, y, true);
+                } else if (STATE.tool === 'eyedropper') {
+                    const p = ctx.getImageData(x, y, 1, 1).data;
+                    STATE.currentColor = [p[0], p[1], p[2], p[3]];
+                    STATE.drawAlpha = p[3];
+                    const hex = '#' + ((1 << 24) + (p[0] << 16) + (p[1] << 8) + p[2]).toString(16).slice(1).toUpperCase();
+                    document.getElementById('txt-hex-color').value = hex;
+                    document.getElementById('native-color-picker').value = hex;
+                    document.getElementById('slider-alpha').value = p[3];
+                    document.getElementById('lbl-alpha').textContent = Math.round(p[3]*100/255) + '%';
+                    document.getElementById('slider-draw-alpha').value = p[3];
+                    document.getElementById('lbl-draw-alpha').textContent = Math.round(p[3]*100/255) + '%';
+                    updateSwatchUI();
+                    setTool('pencil');
+                    STATE.isDrawing = false;
+                } else if (STATE.tool === 'bucket') {
+                    floodFill(x, y, [STATE.currentColor[0], STATE.currentColor[1], STATE.currentColor[2], STATE.drawAlpha]);
+                    saveCurrentFrame();
+                    STATE.isDrawing = false;
+                } else {
+                    // Tool hình học (line, rect, triangle_right, circle)
+                    const cur = ctx.getImageData(0, 0, STATE.width, STATE.height);
+                    STATE.shapeSnapshot = new ImageData(new Uint8ClampedArray(cur.data), cur.width, cur.height);
+                }
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                // Update cursor coordinates badge
+                const rect = canvas.getBoundingClientRect();
+                if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                    const { x, y } = getCanvasCoords(e);
+                    document.getElementById('info-cursor-pos').textContent = `X: ${x}, Y: ${y}`;
+                }
+
+                // If panning
+                if (STATE.isPanning) {
+                    STATE.panX = e.clientX - STATE.panStartX;
+                    STATE.panY = e.clientY - STATE.panStartY;
+                    applyZoom();
+                    return;
+                }
+
+                if (!STATE.isDrawing) return;
+                const { x, y } = getCanvasCoords(e);
+
+                if (STATE.tool === 'pencil') {
+                    drawBrushLine(STATE.lastX, STATE.lastY, x, y, false);
+                    STATE.lastX = x;
+                    STATE.lastY = y;
+                } else if (STATE.tool === 'eraser') {
+                    drawBrushLine(STATE.lastX, STATE.lastY, x, y, true);
+                    STATE.lastX = x;
+                    STATE.lastY = y;
+                } else if (STATE.shapeSnapshot) {
+                    // Live preview cho hình học
+                    ctx.putImageData(STATE.shapeSnapshot, 0, 0);
+                    const filled = STATE.fillShape;
+                    if (STATE.tool === 'line') {
+                        renderLine(STATE.startX, STATE.startY, x, y);
+                    } else if (STATE.tool === 'rect') {
+                        renderRect(STATE.startX, STATE.startY, x, y, filled);
+                    } else if (STATE.tool === 'triangle_right') {
+                        renderRightTriangle(STATE.startX, STATE.startY, x, y, filled);
+                    } else if (STATE.tool === 'circle') {
+                        renderCircle(STATE.startX, STATE.startY, x, y, filled);
+                    }
+                }
+            });
+
+            window.addEventListener('mouseup', () => {
+                if (STATE.isPanning) {
+                    STATE.isPanning = false;
+                    updateCanvasCursor();
+                }
+                if (STATE.isDrawing) {
+                    STATE.isDrawing = false;
+                    STATE.shapeSnapshot = null;
+                    saveCurrentFrame();
+                }
+            });
+
+            // Phím tắt Keyboard
+            window.addEventListener('keydown', (e) => {
+                if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+
+                // Spacebar down for temporary Pan
+                if (e.code === 'Space' && !STATE.spacePressed) {
+                    STATE.spacePressed = true;
+                    updateCanvasCursor();
+                    e.preventDefault();
+                    return;
+                }
+
+                // Shift + Arrows for Panning
+                if (e.shiftKey) {
+                    if (e.key === 'ArrowLeft') { STATE.panX += 50; applyZoom(); e.preventDefault(); return; }
+                    if (e.key === 'ArrowRight') { STATE.panX -= 50; applyZoom(); e.preventDefault(); return; }
+                    if (e.key === 'ArrowUp') { STATE.panY += 50; applyZoom(); e.preventDefault(); return; }
+                    if (e.key === 'ArrowDown') { STATE.panY -= 50; applyZoom(); e.preventDefault(); return; }
+                }
+
+                // Ctrl + shortcuts
+                if (e.ctrlKey) {
+                    if (e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+                    if (e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+                    if (e.key === '=' || e.key === '+') { e.preventDefault(); stepZoom(1); return; }
+                    if (e.key === '-' || e.key === '_') { e.preventDefault(); stepZoom(-1); return; }
+                    if (e.key === '0') { e.preventDefault(); STATE.zoom = 6; centerCanvas(); return; }
+                }
+
+                // Tool shortcuts
+                const k = e.key.toLowerCase();
+                if (k === 'h') setTool('pan');
+                if (k === 'b') setTool('pencil');
+                if (k === 'e') setTool('eraser');
+                if (k === 'g') setTool('bucket');
+                if (k === 'i') setTool('eyedropper');
+                if (k === 'l') setTool('line');
+                if (k === 'u') setTool('rect');
+                if (k === 't') setTool('triangle_right');
+                if (k === 'c') setTool('circle');
+            });
+
+            window.addEventListener('keyup', (e) => {
+                if (e.code === 'Space') {
+                    STATE.spacePressed = false;
+                    updateCanvasCursor();
+                }
+            });
+        }
+
+        function setTool(toolName) {
+            STATE.tool = toolName;
+            document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
+                b.classList.toggle('active', b.getAttribute('data-tool') === toolName);
+            });
+            updateCanvasCursor();
+        }
+
+        // --- UNDO / REDO ---
+        function saveUndo() {
+            const cur = ctx.getImageData(0, 0, STATE.width, STATE.height);
+            const copy = new ImageData(new Uint8ClampedArray(cur.data), cur.width, cur.height);
+            STATE.undoStack.push(copy);
+            if (STATE.undoStack.length > 50) STATE.undoStack.shift();
+            STATE.redoStack = [];
+        }
+
+        function undo() {
+            if (STATE.undoStack.length > 0) {
+                const cur = ctx.getImageData(0, 0, STATE.width, STATE.height);
+                const copy = new ImageData(new Uint8ClampedArray(cur.data), cur.width, cur.height);
+                STATE.redoStack.push(copy);
+                const prev = STATE.undoStack.pop();
+                ctx.putImageData(prev, 0, 0);
+                saveCurrentFrame();
+            }
+        }
+
+        function redo() {
+            if (STATE.redoStack.length > 0) {
+                const cur = ctx.getImageData(0, 0, STATE.width, STATE.height);
+                const copy = new ImageData(new Uint8ClampedArray(cur.data), cur.width, cur.height);
+                STATE.undoStack.push(copy);
+                const next = STATE.redoStack.pop();
+                ctx.putImageData(next, 0, 0);
+                saveCurrentFrame();
+            }
+        }
+
+        // ======================================================================
+        // TIMELINE & MULTI-FRAME ANIMATION
+        // ======================================================================
+        function addEmptyFrame() {
+            const blank = ctx.createImageData(STATE.width, STATE.height);
+            STATE.frames.push(blank);
+            selectFrame(STATE.frames.length - 1);
+            renderTimeline();
+        }
+
+        function saveCurrentFrame() {
+            if (STATE.frames[STATE.currentFrameIdx]) {
+                STATE.frames[STATE.currentFrameIdx] = ctx.getImageData(0, 0, STATE.width, STATE.height);
+                renderTimelineThumb(STATE.currentFrameIdx);
+                renderOnionSkin();
+            }
+        }
+
+        function selectFrame(idx) {
+            if (idx < 0 || idx >= STATE.frames.length) return;
+            saveCurrentFrame();
+            STATE.currentFrameIdx = idx;
+            ctx.putImageData(STATE.frames[idx], 0, 0);
+            document.getElementById('lbl-current-frame-idx').textContent = `${idx + 1} / ${STATE.frames.length}`;
+            renderTimeline();
+            renderOnionSkin();
+        }
+
+        function renderTimeline() {
+            const container = document.getElementById('timeline-frames-list');
+            const addBtn = document.getElementById('btn-add-frame');
+            container.querySelectorAll('.frame-thumb-box').forEach(b => b.remove());
+
+            STATE.frames.forEach((frame, idx) => {
+                const box = document.createElement('div');
+                box.className = 'frame-thumb-box' + (idx === STATE.currentFrameIdx ? ' active' : '');
+                const thumbCanvas = document.createElement('canvas');
+                thumbCanvas.width = STATE.width;
+                thumbCanvas.height = STATE.height;
+                const tctx = thumbCanvas.getContext('2d');
+                tctx.putImageData(frame, 0, 0);
+
+                const num = document.createElement('span');
+                num.className = 'frame-number';
+                num.textContent = idx + 1;
+
+                box.appendChild(thumbCanvas);
+                box.appendChild(num);
+                box.addEventListener('click', () => selectFrame(idx));
+                container.insertBefore(box, addBtn);
+            });
+        }
+
+        function renderTimelineThumb(idx) {
+            const boxes = document.querySelectorAll('.frame-thumb-box');
+            if (boxes[idx]) {
+                const c = boxes[idx].querySelector('canvas');
+                if (c && STATE.frames[idx]) c.getContext('2d').putImageData(STATE.frames[idx], 0, 0);
+            }
+        }
+
+        function renderOnionSkin() {
+            onionCtx.clearRect(0, 0, STATE.width, STATE.height);
+            if (!STATE.onionSkin || STATE.currentFrameIdx === 0) return;
+            const prevFrame = STATE.frames[STATE.currentFrameIdx - 1];
+            if (prevFrame) {
+                onionCtx.putImageData(prevFrame, 0, 0);
+            }
+        }
+
+        function initTimelineEvents() {
+            document.getElementById('btn-add-frame').addEventListener('click', () => {
+                saveCurrentFrame();
+                addEmptyFrame();
+            });
+
+            document.getElementById('btn-duplicate-frame').addEventListener('click', () => {
+                saveCurrentFrame();
+                const cur = ctx.getImageData(0, 0, STATE.width, STATE.height);
+                const copy = ctx.createImageData(STATE.width, STATE.height);
+                copy.data.set(cur.data);
+                STATE.frames.splice(STATE.currentFrameIdx + 1, 0, copy);
+                selectFrame(STATE.currentFrameIdx + 1);
+            });
+
+            document.getElementById('btn-delete-frame').addEventListener('click', () => {
+                if (STATE.frames.length <= 1) {
+                    alert('Phải giữ lại ít nhất 1 khung hình!');
+                    return;
+                }
+                STATE.frames.splice(STATE.currentFrameIdx, 1);
+                const nextIdx = Math.min(STATE.currentFrameIdx, STATE.frames.length - 1);
+                selectFrame(nextIdx);
+            });
+
+            // Animation Preview Loop
+            const playBtn = document.getElementById('btn-anim-play');
+            playBtn.addEventListener('click', toggleAnimPlayer);
+
+            document.getElementById('slider-anim-fps').addEventListener('input', (e) => {
+                STATE.animFps = parseInt(e.target.value);
+                document.getElementById('lbl-anim-fps').textContent = STATE.animFps + ' FPS';
+                if (STATE.animPlaying) {
+                    clearInterval(STATE.animInterval);
+                    startAnimPlayer();
+                }
+            });
+
+            document.getElementById('btn-export-gif-quick').addEventListener('click', exportGif);
+        }
+
+        function toggleAnimPlayer() {
+            if (STATE.animPlaying) {
+                clearInterval(STATE.animInterval);
+                STATE.animPlaying = false;
+                document.getElementById('btn-anim-play').textContent = '▶ Phát';
+            } else {
+                saveCurrentFrame();
+                startAnimPlayer();
+                STATE.animPlaying = true;
+                document.getElementById('btn-anim-play').textContent = '⏸ Dừng';
+            }
+        }
+
+        function startAnimPlayer() {
+            let pIdx = 0;
+            const intervalMs = 1000 / STATE.animFps;
+            STATE.animInterval = setInterval(() => {
+                if (!STATE.frames.length) return;
+                previewCtx.clearRect(0, 0, STATE.width, STATE.height);
+                previewCtx.putImageData(STATE.frames[pIdx], 0, 0);
+                pIdx = (pIdx + 1) % STATE.frames.length;
+            }, intervalMs);
+        }
+
+        async function exportGif() {
+            saveCurrentFrame();
+            const b64Frames = STATE.frames.map(f => {
+                const tempC = document.createElement('canvas');
+                tempC.width = STATE.width;
+                tempC.height = STATE.height;
+                tempC.getContext('2d').putImageData(f, 0, 0);
+                return tempC.toDataURL('image/png');
+            });
+
+            const res = await fetch('/api/generate_gif', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: jsonStringifySafe({ frames: b64Frames, fps: STATE.animFps, scale: 3 })
+            });
+            const data = await res.json();
+            if (data.gif) {
+                downloadDataUri(data.gif, 'esp32_animation.gif');
+            }
+        }
+
+        // ======================================================================
+        // TAB 2: IMAGE CONVERTER LOGIC (SMART BACKGROUND REMOVAL & REALTIME FILTERS)
+        // ======================================================================
+        function initConverterEvents() {
+            const dropzone = document.getElementById('converter-dropzone');
+            const fileInput = document.getElementById('file-input-image');
+
+            dropzone.addEventListener('click', () => fileInput.click());
+            dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+            dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+            dropzone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropzone.classList.remove('dragover');
+                if (e.dataTransfer.files.length) handleImageFile(e.dataTransfer.files[0]);
+            });
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length) handleImageFile(e.target.files[0]);
+            });
+
+            // Paste from clipboard
+            window.addEventListener('paste', (e) => {
+                const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+                if (!items) return;
+                for (const item of items) {
+                    if (item.kind === 'file' && item.type.startsWith('image/')) {
+                        handleImageFile(item.getAsFile());
+                        break;
+                    }
+                }
+            });
+
+            // Preset size dropdown
+            document.getElementById('converter-preset-size').addEventListener('change', (e) => {
+                const val = e.target.value;
+                const customBox = document.getElementById('box-custom-size');
+                if (val === 'custom') {
+                    customBox.style.display = 'grid';
+                } else {
+                    customBox.style.display = 'none';
+                    const [w, h] = val.split('x').map(Number);
+                    document.getElementById('conv-target-w').value = w;
+                    document.getElementById('conv-target-h').value = h;
+                }
+                debouncedProcessConversion();
+            });
+
+            // Auto update on any input change
+            ['conv-target-w', 'conv-target-h', 'conv-scale-mode', 'conv-dither', 'conv-chk-bg-trans', 'conv-bg-mode'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', () => debouncedProcessConversion());
+            });
+
+            // Tolerance threshold slider
+            const threshSlider = document.getElementById('conv-trans-thresh');
+            if (threshSlider) {
+                threshSlider.addEventListener('input', (e) => {
+                    document.getElementById('lbl-trans-thresh').textContent = e.target.value;
+                    debouncedProcessConversion();
+                });
+            }
+
+            // Brightness & Contrast sliders
+            const brightSlider = document.getElementById('conv-brightness');
+            if (brightSlider) {
+                brightSlider.addEventListener('input', (e) => {
+                    document.getElementById('lbl-brightness').textContent = e.target.value + '%';
+                    debouncedProcessConversion();
+                });
+            }
+            const contrastSlider = document.getElementById('conv-contrast');
+            if (contrastSlider) {
+                contrastSlider.addEventListener('input', (e) => {
+                    document.getElementById('lbl-contrast').textContent = e.target.value + '%';
+                    debouncedProcessConversion();
+                });
+            }
+
+            // Background color input
+            const bgColPicker = document.getElementById('conv-bg-color');
+            const bgHexInput = document.getElementById('conv-bg-hex');
+            if (bgColPicker) {
+                bgColPicker.addEventListener('input', (e) => {
+                    if (bgHexInput) bgHexInput.value = e.target.value.toUpperCase();
+                    debouncedProcessConversion();
+                });
+            }
+            if (bgHexInput) {
+                bgHexInput.addEventListener('change', (e) => {
+                    let hex = e.target.value.trim();
+                    if (!hex.startsWith('#')) hex = '#' + hex;
+                    if (bgColPicker) bgColPicker.value = hex;
+                    debouncedProcessConversion();
+                });
+            }
+
+            // Transform buttons: Rotate, Flip
+            document.getElementById('btn-conv-rot')?.addEventListener('click', () => {
+                STATE.convRotate = (STATE.convRotate + 90) % 360;
+                debouncedProcessConversion(0);
+            });
+            document.getElementById('btn-conv-fliph')?.addEventListener('click', () => {
+                STATE.convFlipH = !STATE.convFlipH;
+                debouncedProcessConversion(0);
+            });
+            document.getElementById('btn-conv-flipv')?.addEventListener('click', () => {
+                STATE.convFlipV = !STATE.convFlipV;
+                debouncedProcessConversion(0);
+            });
+            document.getElementById('conv-chk-gray')?.addEventListener('change', () => debouncedProcessConversion());
+            document.getElementById('conv-chk-invert')?.addEventListener('change', () => debouncedProcessConversion());
+
+            // Reset filters
+            document.getElementById('btn-conv-reset')?.addEventListener('click', () => {
+                STATE.convRotate = 0;
+                STATE.convFlipH = false;
+                STATE.convFlipV = false;
+                document.getElementById('conv-brightness').value = 100;
+                document.getElementById('lbl-brightness').textContent = '100%';
+                document.getElementById('conv-contrast').value = 100;
+                document.getElementById('lbl-contrast').textContent = '100%';
+                document.getElementById('conv-chk-gray').checked = false;
+                document.getElementById('conv-chk-invert').checked = false;
+                document.getElementById('conv-trans-thresh').value = 25;
+                document.getElementById('lbl-trans-thresh').textContent = '25';
+                debouncedProcessConversion(0);
+            });
+
+            // Interactive Eyedropper on Original Image
+            const origImg = document.getElementById('conv-img-original');
+            origImg.addEventListener('click', (e) => {
+                if (!origImg.naturalWidth) return;
+                const rect = origImg.getBoundingClientRect();
+                const scaleX = origImg.naturalWidth / rect.width;
+                const scaleY = origImg.naturalHeight / rect.height;
+                const px = Math.floor((e.clientX - rect.left) * scaleX);
+                const py = Math.floor((e.clientY - rect.top) * scaleY);
+
+                const c = document.createElement('canvas');
+                c.width = origImg.naturalWidth;
+                c.height = origImg.naturalHeight;
+                const cctx = c.getContext('2d');
+                cctx.drawImage(origImg, 0, 0);
+                const p = cctx.getImageData(px, py, 1, 1).data;
+                const hex = '#' + ((1 << 24) + (p[0] << 16) + (p[1] << 8) + p[2]).toString(16).slice(1).toUpperCase();
+
+                document.getElementById('conv-bg-color').value = hex;
+                document.getElementById('conv-bg-hex').value = hex;
+                document.getElementById('conv-chk-bg-trans').checked = true;
+                debouncedProcessConversion(0);
+            });
+
+            document.getElementById('btn-pick-bg-sample')?.addEventListener('click', () => {
+                alert('👉 Hãy nhấp chuột trực tiếp vào bất kỳ vị trí nào trên "Ảnh Gốc" bên phải để hút màu nền cần xóa!');
+            });
+
+            document.getElementById('btn-process-convert').addEventListener('click', () => processConversion());
+            document.getElementById('btn-send-to-studio').addEventListener('click', sendConvertedToStudio);
+        }
+
+        function debouncedProcessConversion(delay = 120) {
+            clearTimeout(STATE.convDebounceTimer);
+            STATE.convDebounceTimer = setTimeout(processConversion, delay);
+        }
+
+        function handleImageFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = document.getElementById('conv-img-original');
+                img.src = e.target.result;
+                img.style.display = 'block';
+                document.getElementById('lbl-empty-orig').style.display = 'none';
+                img.onload = () => {
+                    document.getElementById('lbl-orig-size').textContent = `${img.naturalWidth} × ${img.naturalHeight} px`;
+                    processConversion();
+                };
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function processConversion() {
+            const origImg = document.getElementById('conv-img-original');
+            if (!origImg.src) return;
+
+            const w = parseInt(document.getElementById('conv-target-w').value) || 104;
+            const h = parseInt(document.getElementById('conv-target-h').value) || 78;
+            const scaleMode = document.getElementById('conv-scale-mode').value;
+            const dither = document.getElementById('conv-dither').value;
+            const bgTrans = document.getElementById('conv-chk-bg-trans').checked;
+            const bgMode = document.getElementById('conv-bg-mode').value;
+            const transColHex = document.getElementById('conv-bg-color').value;
+            const transThresh = parseInt(document.getElementById('conv-trans-thresh').value);
+            const brightness = (parseInt(document.getElementById('conv-brightness').value) || 100) / 100.0;
+            const contrast = (parseInt(document.getElementById('conv-contrast').value) || 100) / 100.0;
+            const grayscale = document.getElementById('conv-chk-gray').checked;
+            const invert = document.getElementById('conv-chk-invert').checked;
+
+            const r = parseInt(transColHex.substring(1,3), 16) || 0;
+            const g = parseInt(transColHex.substring(3,5), 16) || 0;
+            const b = parseInt(transColHex.substring(5,7), 16) || 0;
+
+            const payload = {
+                image: origImg.src,
+                width: w,
+                height: h,
+                scale_mode: scaleMode,
+                dither: dither,
+                bg_transparent: bgTrans,
+                bg_mode: bgMode,
+                trans_color: [r, g, b],
+                trans_thresh: transThresh,
+                brightness: brightness,
+                contrast: contrast,
+                flip_h: STATE.convFlipH,
+                flip_v: STATE.convFlipV,
+                rotate: STATE.convRotate,
+                grayscale: grayscale,
+                invert: invert
+            };
+
+            try {
+                const res = await fetch('/api/convert_image', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: jsonStringifySafe(payload)
+                });
+                const data = await res.json();
+                if (data.result) {
+                    const resImg = document.getElementById('conv-img-result');
+                    resImg.src = data.result;
+                    resImg.style.display = 'block';
+                    document.getElementById('lbl-empty-result').style.display = 'none';
+                    document.getElementById('lbl-conv-size').textContent = `${data.width} × ${data.height} px`;
+                    STATE.lastConvertedImg = data.result;
+                }
+            } catch (err) {
+                console.error('Lỗi chuyển đổi ảnh:', err);
+            }
+        }
+
+        function sendConvertedToStudio() {
+            if (!STATE.lastConvertedImg) {
+                alert('Chưa có kết quả ảnh chuyển đổi!');
+                return;
+            }
+            const w = parseInt(document.getElementById('conv-target-w').value);
+            const h = parseInt(document.getElementById('conv-target-h').value);
+
+            const img = new Image();
+            img.onload = () => {
+                resetCanvasSize(w, h, 'blank', true);
+                ctx.clearRect(0, 0, w, h);
+                ctx.drawImage(img, 0, 0, w, h);
+                STATE.frames = [ctx.getImageData(0, 0, w, h)];
+                STATE.currentFrameIdx = 0;
+                renderTimeline();
+                document.querySelector('.tab-btn[data-tab="tab-pixel"]').click();
+            };
+            img.src = STATE.lastConvertedImg;
+        }
+
+        // ======================================================================
+        // TAB 3: DEVICE MOCKUP
+        // ======================================================================
+        function initMockupEvents() {
+            // Render on tab show
+        }
+
+        function renderMockup() {
+            saveCurrentFrame();
+            mockupCtx.fillStyle = '#0F172A';
+            mockupCtx.fillRect(0, 0, 320, 240);
+
+            // Mockup Header Bar
+            mockupCtx.fillStyle = '#1E293B';
+            mockupCtx.fillRect(0, 0, 320, 24);
+            mockupCtx.fillStyle = '#38BDF8';
+            mockupCtx.font = '10px monospace';
+            mockupCtx.fillText('ESP32 LaunchPad HID', 10, 16);
+            mockupCtx.fillText('100% BLE', 260, 16);
+
+            // Draw active sprite centered on screen
+            const curFrame = STATE.frames[STATE.currentFrameIdx];
+            if (curFrame) {
+                const tempC = document.createElement('canvas');
+                tempC.width = STATE.width;
+                tempC.height = STATE.height;
+                tempC.getContext('2d').putImageData(curFrame, 0, 0);
+
+                const posX = (320 - STATE.width) / 2;
+                const posY = (240 - STATE.height) / 2 + 10;
+                mockupCtx.drawImage(tempC, posX, posY);
+            }
+        }
+
+        // ======================================================================
+        // TAB 4: EXPORT & FLASH TO ESP32
+        // ======================================================================
+        function initExportEvents() {
+            document.getElementById('btn-generate-c').addEventListener('click', generateCode);
+            document.getElementById('btn-copy-code').addEventListener('click', () => {
+                navigator.clipboard.writeText(STATE.generatedC || document.getElementById('code-output').textContent);
+                alert('Đã sao chép mã nguồn vào Clipboard!');
+            });
+
+            document.getElementById('btn-flash-now').addEventListener('click', triggerFlashDevice);
+            document.getElementById('btn-quick-flash').addEventListener('click', triggerFlashDevice);
+            document.getElementById('btn-close-flash-modal').addEventListener('click', () => {
+                document.getElementById('flash-modal').style.display = 'none';
+            });
+
+            document.getElementById('btn-download-c').addEventListener('click', () => {
+                const name = document.getElementById('export-asset-name').value.trim() || 'asset';
+                downloadTextFile(STATE.generatedC, `${name}.c`);
+            });
+            document.getElementById('btn-download-h').addEventListener('click', () => {
+                const name = document.getElementById('export-asset-name').value.trim() || 'asset';
+                downloadTextFile(STATE.generatedH, `${name}.h`);
+            });
+            document.getElementById('btn-download-png').addEventListener('click', () => {
+                saveCurrentFrame();
+                const tempC = document.createElement('canvas');
+                tempC.width = STATE.width;
+                tempC.height = STATE.height;
+                tempC.getContext('2d').putImageData(STATE.frames[STATE.currentFrameIdx], 0, 0);
+                downloadDataUri(tempC.toDataURL('image/png'), 'sprite.png');
+            });
+            document.getElementById('btn-download-gif').addEventListener('click', exportGif);
+
+            document.getElementById('btn-load-bongo-shiba').addEventListener('click', loadBongoShibaPreset);
+            document.getElementById('btn-create-wallpaper').addEventListener('click', () => {
+                if (confirm('Tạo canvas Full Wallpaper 320x240?')) {
+                    resetCanvasSize(320, 240);
+                    STATE.frames = [];
+                    addEmptyFrame();
+                    document.getElementById('export-asset-name').value = 'earth_wallpaper';
+                    document.getElementById('export-format').value = 'true_color';
+                    document.getElementById('export-apply-target').value = 'earth_wallpaper';
+                }
+            });
+        }
+
+        async function generateCode() {
+            saveCurrentFrame();
+            const b64Frames = STATE.frames.map(f => {
+                const tempC = document.createElement('canvas');
+                tempC.width = STATE.width;
+                tempC.height = STATE.height;
+                tempC.getContext('2d').putImageData(f, 0, 0);
+                return tempC.toDataURL('image/png');
+            });
+
+            const assetName = document.getElementById('export-asset-name').value.trim() || 'my_sprite';
+            const hasAlpha = document.getElementById('export-format').value === 'alpha';
+            const colorSwap = document.getElementById('export-chk-color-swap').checked;
+            const applyTarget = document.getElementById('export-apply-target').value;
+
+            const res = await fetch('/api/export_c', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: jsonStringifySafe({
+                    frames: b64Frames,
+                    asset_name: assetName,
+                    has_alpha: hasAlpha,
+                    color_16_swap: colorSwap,
+                    apply_target: applyTarget
+                })
+            });
+
+            const data = await res.json();
+            if (data.c_code) {
+                STATE.generatedC = data.c_code;
+                STATE.generatedH = data.h_code;
+                document.getElementById('code-output').textContent = data.c_code;
+                document.getElementById('lbl-code-filename').textContent = `${assetName}.c (LVGL v8 Compatible)`;
+                if (data.applied_path) {
+                    alert(`✅ Đã ghi trực tiếp vào dự án thành công:\n${data.applied_path}`);
+                }
+            }
+        }
+
+        async function triggerFlashDevice() {
+            // Tự động sinh mã và áp dụng trước nếu có target
+            const applyTarget = document.getElementById('export-apply-target').value;
+            if (applyTarget !== 'none') {
+                await generateCode();
+            }
+
+            const modal = document.getElementById('flash-modal');
+            const consoleLog = document.getElementById('flash-log-console');
+            modal.style.display = 'flex';
+            consoleLog.textContent = '🚀 Bắt đầu quá trình Build & Flash firmware lên ESP32...\n';
+
+            const res = await fetch('/api/flash_device', { method: 'POST' });
+            const data = await res.json();
+            if (data.status === 'started') {
+                pollFlashProgress();
+            } else {
+                consoleLog.textContent += '❌ Không thể khởi động nạp: ' + (data.error || 'Lỗi server');
+            }
+        }
+
+        function pollFlashProgress() {
+            const consoleLog = document.getElementById('flash-log-console');
+            const spin = document.getElementById('lbl-flash-spin');
+
+            const timer = setInterval(async () => {
+                try {
+                    const res = await fetch('/api/flash_status');
+                    const status = await res.json();
+
+                    if (status.log && status.log.length) {
+                        consoleLog.textContent = status.log.join('\n');
+                        consoleLog.scrollTop = consoleLog.scrollHeight;
+                    }
+
+                    if (!status.running) {
+                        clearInterval(timer);
+                        if (status.success) {
+                            spin.textContent = '✅';
+                            consoleLog.textContent += '\n\n🎉 FLASH HOÀN TẤT THÀNH CÔNG!';
+                        } else {
+                            spin.textContent = '❌';
+                            consoleLog.textContent += '\n\n❌ NẠP THẤT BÀI! Vui lòng kiểm tra cổng USB và CuteCom.';
+                        }
+                    }
+                } catch (e) {
+                    clearInterval(timer);
+                }
+            }, 1000);
+        }
+
+        // --- LOAD PRESET ASSETS ---
+        async function loadProjectAssets() {
+            try {
+                const res = await fetch('/api/load_project_assets');
+                const data = await res.json();
+                if (data.assets && data.assets.length) {
+                    // Cache project assets
+                    window.PROJECT_ASSETS = data.assets;
+                }
+            } catch (e) {}
+        }
+
+        function loadBongoShibaPreset() {
+            const asset = (window.PROJECT_ASSETS || []).find(a => a.id === 'bongo_shiba');
+            if (!asset) {
+                alert('Không tìm thấy file Bongo Shiba gốc trong dự án!');
+                return;
+            }
+            if (confirm('Tải 3 frame Bongo Shiba vào Studio để chỉnh sửa?')) {
+                resetCanvasSize(asset.width, asset.height);
+                STATE.frames = [];
+
+                let loadedCount = 0;
+                asset.frames.forEach((b64, idx) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const tempC = document.createElement('canvas');
+                        tempC.width = asset.width;
+                        tempC.height = asset.height;
+                        const tctx = tempC.getContext('2d');
+                        tctx.drawImage(img, 0, 0);
+                        STATE.frames[idx] = tctx.getImageData(0, 0, asset.width, asset.height);
+                        loadedCount++;
+                        if (loadedCount === asset.frames.length) {
+                            selectFrame(0);
+                            document.getElementById('export-asset-name').value = 'bongo_shiba';
+                            document.getElementById('export-apply-target').value = 'bongo_shiba';
+                            document.getElementById('export-format').value = 'alpha';
+                            renderTimeline();
+                        }
+                    };
+                    img.src = b64;
+                });
+            }
+        }
+
+        // --- HELPER UTILITIES ---
+        function jsonStringifySafe(obj) {
+            return JSON.stringify(obj);
+        }
+
+        function downloadDataUri(uri, filename) {
+            const a = document.createElement('a');
+            a.href = uri;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        function downloadTextFile(text, filename) {
+            const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+            const url = URL.createObjectURL(blob);
+            downloadDataUri(url, filename);
+            URL.revokeObjectURL(url);
+        }
+
+        // Start App
+        window.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
